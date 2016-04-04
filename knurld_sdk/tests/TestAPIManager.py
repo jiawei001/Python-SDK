@@ -139,6 +139,7 @@ class TestTokenGetter(unittest.TestCase):
         With this test, a token is set to expire every 10 seconds
         Fetches and prints a token at 2 seconds interval
         Assert that we get two unique tokens
+        TODO: This is actually a functional test which needs to be placed at more appropriate location
         """
         until = 10
         interval = 2
