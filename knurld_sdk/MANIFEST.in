@@ -1,0 +1,3 @@
+include knurld_sdk/knurld_sdk/config.cfg
+include knurld_sdk/knurld_sdk/README.md
+include knurld_sdk/knurld_sdk/requirements.txt
