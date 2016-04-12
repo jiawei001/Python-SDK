@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from dogpile.cache import make_region
 
 from knurld_sdk.config import Configuration

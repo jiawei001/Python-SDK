@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import contextlib
 import datetime
 import dropbox
@@ -97,6 +98,11 @@ def stopwatch(message):
         print('Total elapsed time for %s: %.3f' % (message, t1 - t0))
 
 
+def dropbox_client():
+    dbx = dropbox.Dropbox(dbx_config['ACCESS_TOKEN'])
+    return dbx
+
+
 def main():
 
     dbx = dropbox.Dropbox(dbx_config['ACCESS_TOKEN'])
@@ -110,10 +116,10 @@ def main():
     # lets try downloading existing file first
     # res = download(dbx, remote_file_path)
     # print(res)
-    print('Download Successful!')
+    # print('Download Successful!')
 
     # full local path of the file to be uploaded
-    file_path = '/Users/rbakare/Downloads/enrollment.wav'
+    file_path = '/Users/rbakare/Downloads/myRecording00(1).wav'
 
     # now lets try uploading
     res = upload(dbx, file_path, remote_file_path, overwrite=True)
