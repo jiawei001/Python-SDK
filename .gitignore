@@ -11,5 +11,7 @@
 # pycharm
 *.idea
 
-# miscellaneous
+# packages or miscellaneous
+.coverage
+.coveragerc
 .DS_Store
