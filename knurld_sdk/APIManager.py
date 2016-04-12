@@ -1,23 +1,36 @@
+# -*- coding: utf-8 -*-
+
 import json
+import re
 import requests
+import time
 from datetime import datetime
 
 from knurld_sdk import app_globals as g
+from knurld_sdk import helpers as h
+from knurld_sdk.uploader.Dropbox import upload, share, dropbox_client
 
 
-def authorization_header(token, _type='json', developer_id=None):
+def authorization_header(token=None, content_type='application/json', developer_id=None):
 
-    headers = {
-        'Content-Type': 'application/' + str(_type),
-        'Authorization': 'Bearer ' + str(token),
-        'Developer-Id': g.config['DEVELOPER_ID']
-    }
+    try:
+        tg = TokenGetter()
+        token = token if token else tg.get_token()
 
-    # for a consumer the consumer token replaces the Developer-Id
-    if developer_id:
-        headers['Developer-Id'] = developer_id
+        headers = {
+            'Content-Type': content_type,
+            'Authorization': 'Bearer ' + str(token),
+            'Developer-Id': g.config['DEVELOPER_ID']
+        }
+        # for a consumer the consumer token replaces the Developer-Id
+        if developer_id:
+            headers['Developer-Id'] = developer_id
 
-    return headers
+        return headers
+
+    except Exception as e:
+        print('Could not obtain Authorization header' + str(e))
+        return None
 
 
 class Verification(object):
@@ -27,99 +40,222 @@ class Verification(object):
 class Enrollment(object):
 
     def __init__(self, token, model, consumer):
-        self.enrollment = None
-        self.consumer_token = None
-        self._token = token
+        self.token = token
         self.app_model = model
         self.consumer = consumer
+        self.enrollment_url = None
 
     @property
     def enrollment_id(self):
-        if self.enrollment:
-            return str(self.enrollment.split('/')[-1])
-        return ''
+        return h.parse_id_from_href(self.enrollment_url)
 
     @property
     def payload(self):
-
-        payload = {
-            "consumer": self.consumer,
-            "application": self.app_model
+        p = {
+            "application": self.app_model,
+            "consumer": self.consumer
         }
-        return payload
+        return p
 
-    def upsert_enrollment(self, enrollment_id=None, wav_file=None):
+    def create(self):
+        """ create the enrollment using an app-model and consumer
         """
-        TODO: sample test for the Sphinx documentation
-        py:function:: upsert_enrollment(sequence[, start=0])
+        headers = authorization_header()
 
-           Return an iterator that yields tuples of an index and an item of the
-           *sequence*. (And so on.)
-        """
+        try:
+            url = g.config['URL_ENROLLMENTS']
 
-        headers = authorization_header(self._token)
+            response = requests.post(url, json=self.payload, headers=headers)
+            return h.get_response_content(response)
+
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+    def update(self, enrollment_id, wav_file=None, intervals=None):
+
+        if not enrollment_id:
+            print('Enrollment Id is required.')
+            return None
+
+        headers = authorization_header()
 
         if wav_file:
             self.payload['enrollment.wav'] = wav_file
 
-        url = g.config['URL_ENROLLMENTS']
-        if enrollment_id:
-            url += '/' + enrollment_id
+        if intervals:
+            self.payload['intervals'] = intervals
 
-        print(url)
-        print(self.payload)
-        print(headers)
-        response = requests.post(url, json=self.payload, headers=headers)
+        try:
+            url = g.config['URL_ENROLLMENTS'] + '/' + enrollment_id
+
+            response = requests.post(url, json=self.payload, headers=headers)
+            return h.get_response_content(response)
+
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+    def get(self, enrollment_id):
+        """ get enrollment for the given enrollment id
+        """
+        headers = authorization_header()
+
+        try:
+            url = g.config['URL_ENROLLMENTS'] + '/' + enrollment_id
+
+            response = requests.get(url, headers=headers)
+            return h.get_response_content(response)
+
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+    def get_all(self, start=0, end=10, offset=10):
+        """ return all the enrollments for given offset, start, end
+            TODO: the proper usage of parameters
+        """
+
+        headers = authorization_header()
+
+        try:
+            url = g.config['URL_ENROLLMENTS']
+
+            response = requests.get(url, headers=headers)
+            return h.get_response_content(response)
+
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+    def steps(self, recorded_file_url):
+        # step-1: put consumer_id, model_id
+        response = self.create()
+        self.enrollment_url = h.parse_response(response, get_field='href')
+        print('step-1: create: put consumer_id, model_id: self.enrollment_id ' + str(self.enrollment_id))
+
+        # step-2: get consumer token
+        consumer_token = self.consumer.get_token()
+        print('step-2: get consumer token: consumer_token: ' + str(consumer_token))
+
+        # step-3: get enrollment instructions
+        res = self.get(self.enrollment_id)
+
+        # step-4: record the .wav file
+        # this step is independent of the other operations in this method
+        # recorded_file_url = record_upload_share
+
+        # step-5: get the endpoint analysis for the recorded .wav file
+
+        hosted_audio_url = 'https://www.dropbox.com/s/uawm0lb0p3zl4nj/enrollment.wav?dl=1'
+        a = Analysis(consumer_token, hosted_audio_url, num_words=3, )
+        intervals = res.get('intervals')
+
+        # step-6: post the .wav file along with the intervals, complete enrollment
+        response = self.update(self.enrollment_id, wav_file=hosted_audio_url, intervals=intervals)
         print(response)
-        result = json.loads(response.content)
 
-        if result.get('href'):
-            self.enrollment = result.get('href')
+
+class Analysis(object):
+
+    def __init__(self, token, model, consumer, hosted_audio_url, num_words):
+        self.token = token
+        self.task_name = None
+        self.task_status = None
+        self.app_model = model
+        self.consumer = consumer
+        self.hosted_audio_url = hosted_audio_url
+        self.num_words = num_words
+
+    @property
+    def payload(self):
+        p = {
+            "audioUrl": self.hosted_audio_url,
+            "words": self.num_words
+        }
+        return p
+
+    def start_task(self):
+
+        headers = authorization_header(developer_id=self.consumer.consumer_token)
+        endpoint_analysis_url = g.config['URL_ANALYSIS']
+        response = requests.post(endpoint_analysis_url, json=self.payload, headers=headers)
+
+        if response and response.content:
+            result = json.loads(response.content)
+            self.task_name = result.get('taskName')
+            self.task_name = result.get('taskStatus')
+            return result
+
+        return None
+
+    def check_status(self, task_name):
+        headers = authorization_header(developer_id=self.consumer.consumer_token)
+        # for endpointAnalysis-id-get, the trailing word 'url' needs to be removed
+        endpoint_analysis_url = re.sub('url$', str(task_name), g.config['URL_ANALYSIS'])
+
+        response = requests.get(endpoint_analysis_url, headers=headers)
+
+        if response and response.content:
+            result = json.loads(response.content)
+            return result
+
+        return None
+
+    def execute_step(self):
+
+        result = None
+        status_timestamp = None
+        status_time_lapse = 0
+        try:
+            result = self.start_task()
+            self.task_name = result.get('taskName')
+            self.task_status = result.get('taskStatus')
+            status_timestamp = datetime.now()
+        except Exception as e:
+            print('Analysis start task error:'.format(e))
+
+        try:
+            print('task_name: ' + str(self.task_name))
+            print('task_status: ' + str(self.task_status))
+
+            while unicode(self.task_status) != u'completed' \
+                    and status_time_lapse < float(g.config['REATTEMPT_CALL_FOR']):
+
+                time.sleep(1)
+                result = self.check_status(self.task_name)
+                self.task_status = result.get('taskStatus')
+                status_time_lapse = (datetime.now() - status_timestamp).total_seconds()
+
+        except AttributeError as e:
+            print('Analysis check status error {}'.format(e))
 
         return result
-
-    def get_enrollment(self, enrollment_id=None):
-
-        headers = authorization_header(self._token)
-
-        url = g.config['URL_ENROLLMENTS']
-        if enrollment_id:
-            url += '/' + enrollment_id
-
-        response = requests.get(url, headers=headers)
-        result = json.loads(response.content)
-
-        if result.get('href'):
-            self.enrollment = result.get('href')
-
-        return result
-
-    def get_consumer_token(self, username, password):
-
-        payload = {'username': username,
-                   'password': password}
-
-        headers = authorization_header(self._token)
-        url = g.config['URL_CONSUMERS'] + '/token'
-
-        response = requests.post(url, json=payload, headers=headers)
-        self.consumer_token = json.loads(response.content).get('token')
-
-        return self.consumer_token
 
 
 class Consumer(object):
 
-    def __init__(self, token):
-        self._token = token
-        self.consumer = None
+    def __init__(self, token, username, password):
+        self.token = token
+        self.username = username
+        self.password = password
+        self.consumer_url = None
+        self.consumer_token = None
 
     @property
     def consumer_id(self):
-        if self.consumer:
-            return self.consumer.split('/')[-1]
-        return ''
+        if self.consumer_url:
+            return h.parse_id_from_href(self.consumer_url)
 
+    @property
+    def payload(self):
+        p = {
+            'username': self.username,
+            'password': self.password
+        }
+        return p
+
+    # TODO: upsert to - create and update
     def upsert_consumer(self, payload, consumer_id=None):
         """
         TODO: convert it as per the following definition using consumer_id
@@ -134,20 +270,20 @@ class Consumer(object):
         :return: href for the created or updated consumer
         """
 
-        headers = authorization_header(self._token)
+        headers = authorization_header()
 
         url = g.config['URL_CONSUMERS']
         if consumer_id:
             url += '/' + consumer_id
 
         response = requests.post(url, json=payload, headers=headers)
-        self.consumer = json.loads(response.content).get('href')
+        self.consumer_url = json.loads(response.content).get('href')
 
         return self.consumer_id
 
     def get_consumer(self, consumer_id=None):
 
-        headers = authorization_header(self._token)
+        headers = authorization_header()
 
         url = g.config['URL_CONSUMERS']
         if consumer_id:
@@ -161,27 +297,77 @@ class Consumer(object):
             for item in result.get('items'):
                 print item.get('href')
             # set the first one from result to be the consumer for this result
-            self.consumer = result.get('items')[0].get('href')
+            self.consumer_url = result.get('items')[0].get('href')
         elif result.get('href'):
             print result.get('href')
-            self.consumer = result.get('href')
+            self.consumer_url = result.get('href')
 
         return self.consumer_id
 
+    def get_token(self):
+        """ returns consumer specific token based on the given user
+        """
+        headers = authorization_header()
 
-class AppModeler(object):
+        try:
+            url = g.config['URL_CONSUMERS'] + '/token'
+
+            response = requests.post(url, json=self.payload, headers=headers)
+            self.consumer_token = json.loads(response.content).get('token')
+            return self.consumer_token
+
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+
+class AppModel(object):
 
     def __init__(self, token):
-        self._token = token
-        self.app_model = None
+        self.token = token
+        self.payload = None
+        self.app_model_url = None
 
     @property
     def app_model_id(self):
-        if self.app_model:
-            return self.app_model.split('/')[-1]
-        return ''
+        if self.app_model_url:
+            return h.parse_id_from_href(self.app_model_url)
 
-    def upsert_app_model(self, payload, app_model_id=None):
+    def set_payload(self, **kwargs):
+        """ Accepts keyword arguments
+        """
+
+        mandatory_fields = ['vocabulary', 'verificationLength', 'enrollmentRepeats']
+        all_mandatory_fields_present = all([x in kwargs.keys() for x in mandatory_fields])
+
+        if not all_mandatory_fields_present:
+            print('Must provide all mandatory fields: ' + str(mandatory_fields))
+            return None
+
+        self.payload = kwargs
+
+    def create(self):
+        """
+        :param
+        payload (e.g. format) = {
+                "vocabulary": ["boston", "chicago", "pyramid"],
+                "verificationLength": 3,
+                "enrollmentRepeats": 3
+            }
+        :return: href for the created or updated app model
+        """
+
+        headers = authorization_header()
+
+        url = g.config['URL_APP_MODELS']
+
+        # TODO: try catch
+        response = requests.post(url, json=self.payload, headers=headers)
+        self.app_model_url = json.loads(response.content).get('href')
+
+        return self.app_model_id
+
+    def update(self, app_model_id=None):
         """
         TODO: convert it as per the following definition using app_model_id
         update or insert the app model
@@ -195,20 +381,21 @@ class AppModeler(object):
         :return: href for the created or updated app model
         """
 
-        headers = authorization_header(self._token)
+        headers = authorization_header()
 
         url = g.config['URL_APP_MODELS']
         if app_model_id:
             url += '/' + app_model_id
 
-        response = requests.post(url, json=payload, headers=headers)
-        self.app_model = json.loads(response.content).get('href')
+        # TODO: try catch
+        response = requests.post(url, json=self.payload, headers=headers)
+        self.app_model_url = json.loads(response.content).get('href')
 
         return self.app_model_id
 
     def get_app_model(self, app_model_id=None):
 
-        headers = authorization_header(self._token)
+        headers = authorization_header()
 
         url = g.config['URL_APP_MODELS']
         if app_model_id:
@@ -217,7 +404,7 @@ class AppModeler(object):
         response = requests.get(url, headers=headers)
         result = json.loads(response.content)
         if result.get('href'):
-            self.app_model = result.get('href')
+            self.app_model_url = result.get('href')
 
         return result
 
@@ -249,16 +436,6 @@ class TokenGetter(object):
 
         return False
 
-    def __deprecated__is_valid_token_status(self):
-        """
-        TO BE OBSOLETE METHOD
-        Brian: do not rely on the token status api as it is going to go obsolete
-        """
-        params = authorization_header(self._token)
-
-        response = requests.get(g.config['URL_TOKEN_STATUS'], params=params)
-        return True if response.status_code == 200 else False
-
     def renew_access_token(self):
 
         headers = {'Content-Type': 'application/x-www-form-urlencoded',
@@ -284,3 +461,13 @@ class TokenGetter(object):
                                              expiration_time=self._token_expires,
                                              should_cache_fn=self._is_valid_token)
         return self._token
+
+
+class Recorder(object):
+
+    def record(self):
+        pass
+
+    def upload_and_share(self):
+        upload(dropbox_client(), local_file_path='', remote_file_path='')
+

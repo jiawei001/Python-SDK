@@ -1,17 +1,14 @@
+# -*- coding: utf-8 -*-
 import time
 import unittest
 from datetime import datetime, timedelta
 
-from knurld_sdk.APIManager import TokenGetter, AppModeler, Consumer, Enrollment
-
-
-def unique_id_pattern(count=32):
-    # pattern that matches both type of tokens (admin/consumer)
-    return r'(\w|\.|-){' + str(count) + r'}'
+from knurld_sdk.APIManager import TokenGetter, AppModel, Consumer, Enrollment, Analysis
+from knurld_sdk import helpers as h
 
 
 def temp_token():
-    # obtain a valid test token
+    # obtain a valid admin token
     tg = TokenGetter()
     return tg.get_token()
 
@@ -24,60 +21,97 @@ class TestEnrollment(unittest.TestCase):
 
     model_id = '3c1bbea5f380bcbfef6910e0c879bd04'  # "boston", "chicago", "san francisco"
     consumer_id = '3c1bbea5f380bcbfef6910e0c879bf82'  # M theo walcott
-
+    enrollment_id = '5571c3a5c203f17826740e9019832ff8'  # M theo walcott
     e = Enrollment(temp_token(), model_id, consumer_id)
 
-    def test_upsert_enrollment(self):
-        _ = self.e.upsert_enrollment()
-        self.assertRegexpMatches(self.e.enrollment_id, unique_id_pattern())
+    hosted_audio_url = 'https://www.dropbox.com/s/uawm0lb0p3zl4nj/enrollment.wav?dl=1'
 
-    def test_get_enrollment(self):
+    def test_create(self):
+        response = self.e.create()
+        print(response)
+        self.assertIsNotNone(response)
+
+    def test_update(self):
+        intervals = list()
+        response = self.e.update(self.enrollment_id, wav_file=self.hosted_audio_url, intervals=intervals)
+
+    """
+    def test_get(self):
         response = self.e.get_enrollment()
-        self.assertIsNotNone(response.get('items'), unique_id_pattern())
+        self.assertIsNotNone(response.get('items'))
 
         enrollment_id = 'a67a3f337823e2d56ec264f8c3d6ceb5'
         _ = self.e.get_enrollment(enrollment_id)
-        self.assertRegexpMatches(self.e.enrollment_id, unique_id_pattern())
-
+        self.assertRegexpMatches(self.e.enrollment_id, h.regx_pattern_id())
         self.assertIsNotNone(self.e.get_enrollment(enrollment_id).get('instructions'))
 
     def test_get_consumer_token(self):
         user = 'alexis'
         pswd = 'sanchez'
         consumer_token = self.e.get_consumer_token(user, pswd)
-        self.assertRegexpMatches(consumer_token, unique_id_pattern(count=342))
+        self.assertRegexpMatches(consumer_token, h.regx_pattern_id(count=342))
+    """
+
+
+class TestAnalysis(unittest.TestCase):
+
+    hosted_audio_url = 'https://www.dropbox.com/s/uawm0lb0p3zl4nj/enrollment.wav?dl=1'
+    model_id = '3c1bbea5f380bcbfef6910e0c879bd04'  # "boston", "chicago", "san francisco"
+    consumer = Consumer(temp_token(), username='theo', password='walcott')  # M theo walcott
+
+    @property
+    def analysis(self):
+        a = Analysis(temp_token(), self.model_id, self.consumer, self.hosted_audio_url, num_words=3)
+        return a
+
+    def test_start_task(self):
+        result = self.analysis.start_task()
+        self.assertIsNotNone(result)
+        self.assertEqual(result.get('taskStatus'), 'started')
+        self.assertRegexpMatches(result.get('taskName'), h.regx_pattern_id())
+
+    def test_check_status(self):
+        result = self.analysis.start_task()
+        test_task_name = result.get('taskName')
+        result = self.analysis.check_status(test_task_name)
+        self.assertIsNotNone(result)
+        self.assertIn(result.get('taskStatus'), ['running', 'completed'])
+
+    def test_execute_step(self):
+        result = self.analysis.execute_step()
+        print(result)
 
 
 class TestConsumer(unittest.TestCase):
 
-    c = Consumer(temp_token())
+    c = Consumer(temp_token(), username='theo', password='walcott')
 
     def test_upsert_consumer(self):
 
         payload = {
             "gender": "M",
-            "username": "theo" + str(datetime.now()),   # making sure of unique username each time
-            "password": "walcott"
+            "username": str(self.c.username) + str(datetime.now()),   # making sure of unique username each time
+            "password": str(self.c.password)
         }
 
         # TODO: currently the upsert method can only create a consumer, so modify this test when it's method evolves
         consumer = self.c.upsert_consumer(payload, temp_token())
-        self.assertRegexpMatches(consumer, unique_id_pattern())
+        self.assertRegexpMatches(consumer, h.regx_pattern_id())
 
     def test_get_consumer(self):
 
         consumer = self.c.get_consumer()
-        self.assertRegexpMatches(consumer, unique_id_pattern())
+        self.assertRegexpMatches(consumer, h.regx_pattern_id())
 
         # test for specific model id
         consumer_id = '3c1bbea5f380bcbfef6910e0c879bf82'  # M theo walcott
         consumer = self.c.get_consumer(consumer_id)
-        self.assertRegexpMatches(consumer, unique_id_pattern())
+        self.assertRegexpMatches(consumer, h.regx_pattern_id())
 
 
-class TestAppModeler(unittest.TestCase):
+class TestAppModel(unittest.TestCase):
 
-    am = AppModeler(temp_token())
+    am = AppModel(temp_token())
 
     def test_upsert_app_model(self):
 
@@ -89,17 +123,17 @@ class TestAppModeler(unittest.TestCase):
 
         # TODO: currently the upsert method can only create an app model, so modify this test when it's method evolves
         app_model = self.am.upsert_app_model(payload)
-        self.assertRegexpMatches(app_model, unique_id_pattern())
+        self.assertRegexpMatches(app_model, h.regx_pattern_id())
 
     def test_get_app_model(self):
 
         app_model = self.am.get_app_model()
-        self.assertRegexpMatches(app_model, unique_id_pattern())
+        self.assertRegexpMatches(app_model, h.regx_pattern_id())
 
         # test for specific model id
         model_id = '3c1bbea5f380bcbfef6910e0c879bd04'  # "boston", "chicago", "san francisco"
         app_model = self.am.get_app_model(model_id)
-        self.assertRegexpMatches(app_model, unique_id_pattern())
+        self.assertRegexpMatches(app_model, h.regx_pattern_id())
 
 
 class TestTokenGetter(unittest.TestCase):
