@@ -236,10 +236,9 @@ class Analysis(object):
 
 class Consumer(object):
 
-    def __init__(self, token, username, password):
+    def __init__(self, token, payload):
         self.token = token
-        self.username = username
-        self.password = password
+        self.payload = self.set_payload(payload)
         self.consumer_url = None
         self.consumer_token = None
 
@@ -248,13 +247,24 @@ class Consumer(object):
         if self.consumer_url:
             return h.parse_id_from_href(self.consumer_url)
 
-    @property
-    def payload(self):
-        p = {
-            'username': self.username,
-            'password': self.password
-        }
-        return p
+    def set_payload(self, kwargs):
+        """ setter method for attribute payload which validates and stores parameters while creating the consumer
+        :param kwargs: the parameters you want to set to while creating a consumer
+        """
+
+        mandatory_fields = ['username', 'password', 'gender']
+        all_mandatory_fields_present = all([x in kwargs.keys() for x in mandatory_fields])
+
+        try:
+            if not all_mandatory_fields_present:
+                error_text = 'Must provide all mandatory fields: ' + str(mandatory_fields)
+                raise ImproperArgumentsException(error_text)
+        except ImproperArgumentsException as e:
+            print('Error while creating app model. ' + str(e))
+            return None
+
+        self.payload = kwargs
+        return self.payload
 
     def create(self):
         """
@@ -275,21 +285,22 @@ class Consumer(object):
             url = g.config['URL_CONSUMERS']
 
             response = requests.post(url, json=self.payload, headers=headers)
-            self.consumer_url = json.loads(response.content).get('href')
+            if response.status_code == 201:
+                self.consumer_url = json.loads(response.content).get('href')
+                return self.consumer_id
+            else:
+                return response.content
 
-            return self.consumer_id
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
             return None
 
-    def update(self, consumer_id):
+    def update(self, consumer_id, payload_override=None):
         """
-        update the app model
+        update the app model's password field. Note: username and the gender are non editable fields
         :param
         payload (e.g. format) = {
-            "gender": "M",
-            "username": "theo",
-            "password": "walcott"
+            "password": "walcott360"
         }
         consumer_id: an existing consumer_id
         :return: href for the created or updated consumer
@@ -298,14 +309,18 @@ class Consumer(object):
         headers = authorization_header()
 
         try:
-            url = g.config['URL_CONSUMERS']
-            if consumer_id:
-                url += '/' + consumer_id
+            url = g.config['URL_CONSUMERS'] + '/' + consumer_id
+
+            if payload_override:
+                self.payload = payload_override
 
             response = requests.post(url, json=self.payload, headers=headers)
-            self.consumer_url = json.loads(response.content).get('href')
+            if response.status_code == 202:
+                self.consumer_url = json.loads(response.content).get('href')
+                return self.consumer_id
+            else:
+                return response.content
 
-            return self.consumer_id
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
             return None
@@ -315,22 +330,27 @@ class Consumer(object):
         headers = authorization_header()
 
         try:
-            url = g.config['URL_CONSUMERS']
-            if consumer_id:
-                url += '/' + consumer_id
+            url = g.config['URL_CONSUMERS'] + '/' + consumer_id
 
             response = requests.get(url, headers=headers)
-            result = json.loads(response.content)
+            if response.status_code == 200:
+                result = json.loads(response.content)
+                if result.get('href'):
+                    self.consumer_url = result.get('href')
+            else:
+                # TODO: log errors
+                print(response.status_code)
+                print(response.content)
+                return response.content
 
-            if result.get('href'):
-                self.consumer_url = result.get('href')
-
-            return self.consumer_id
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
             return None
 
-    def get_all(self, offset=None):
+        return result
+
+    @staticmethod
+    def get_all(offset=None):
 
         headers = authorization_header()
 
@@ -338,8 +358,14 @@ class Consumer(object):
             url = g.config['URL_CONSUMERS']
 
             response = requests.get(url, headers=headers)
-            result = json.loads(response.content)
-            return result
+            if response.status_code == 200:
+                result = json.loads(response.content)
+                return result
+            else:
+                # TODO: log errors
+                print(response.status_code)
+                print(response.content)
+                return response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
@@ -408,7 +434,7 @@ class AppModel(object):
                 self.app_model_url = json.loads(response.content).get('href')
                 return self.app_model_id
             else:
-                return response
+                return response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
@@ -426,7 +452,6 @@ class AppModel(object):
                 self.payload = payload_override
 
             response = requests.post(url, json=self.payload, headers=headers)
-            print(response)
             if response.status_code == 202:
                 self.app_model_url = json.loads(response.content).get('href')
                 return self.app_model_id
@@ -434,7 +459,7 @@ class AppModel(object):
                 # TODO: log errors
                 print(response.status_code)
                 print(response.content)
-                return response
+                return response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
@@ -458,7 +483,7 @@ class AppModel(object):
                 # TODO: log errors
                 print(response.status_code)
                 print(response.content)
-                return response
+                return response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
@@ -479,7 +504,7 @@ class AppModel(object):
             if response.status_code == 200:
                 result = json.loads(response.content)
             else:
-                return response
+                return response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))

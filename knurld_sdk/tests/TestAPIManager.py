@@ -58,7 +58,7 @@ class TestAnalysis(unittest.TestCase):
 
     hosted_audio_url = 'https://www.dropbox.com/s/uawm0lb0p3zl4nj/enrollment.wav?dl=1'
     model_id = '3c1bbea5f380bcbfef6910e0c879bd04'  # "boston", "chicago", "san francisco"
-    consumer = Consumer(temp_token(), username='theo', password='walcott')  # M theo walcott
+    # consumer = Consumer(temp_token(), username='theo', password='walcott')  # M theo walcott
 
     @property
     def analysis(self):
@@ -85,29 +85,51 @@ class TestAnalysis(unittest.TestCase):
 
 class TestConsumer(unittest.TestCase):
 
-    c = Consumer(temp_token(), username='theo', password='walcott')
+    p = {
+        # a unique username for testing
+        "username": 'theo_' + str(datetime.now()),
+        "password": 'walcott',
+        "gender": 'M'
+    }
+    c = Consumer(token=temp_token(), payload=p)
 
-    def test_upsert_consumer(self):
+    def test_create(self):
+        consumer = self.c.create()
+        self.assertRegexpMatches(consumer, h.regx_pattern_id())
 
-        payload = {
-            "gender": "M",
-            "username": str(self.c.username) + str(datetime.now()),   # making sure of unique username each time
-            "password": str(self.c.password)
+    def test_update(self):
+        p = {
+            # a unique username for testing
+            "username": 'theo_' + str(datetime.now()) + '_alias',
+            "password": 'walcott',
+            "gender": 'M'
         }
-
-        # TODO: currently the upsert method can only create a consumer, so modify this test when it's method evolves
-        consumer = self.c.upsert_consumer(payload, temp_token())
+        c_alias = Consumer(token=temp_token(), payload=p)
+        test_consumer_id = c_alias.create()
+        p = {
+            "password": 'walcott360'
+        }
+        consumer = c_alias.update(test_consumer_id, payload_override=p)
         self.assertRegexpMatches(consumer, h.regx_pattern_id())
 
-    def test_get_consumer(self):
+    def test_get(self):
+        p = {
+            # a unique username for testing
+            "username": 'theo_' + str(datetime.now()) + '_alias',
+            "password": 'walcott',
+            "gender": 'M'
+        }
+        c_alias = Consumer(token=temp_token(), payload=p)
+        test_consumer_id = c_alias.create()
+        result = c_alias.get(test_consumer_id)
+        self.assertIsNotNone(result.get('href'))
 
-        consumer = self.c.get_consumer()
-        self.assertRegexpMatches(consumer, h.regx_pattern_id())
+    def test_get_all(self):
+        result = self.c.get_all()
+        self.assertIsNotNone(result.get('items'))
 
-        # test for specific model id
-        consumer_id = '3c1bbea5f380bcbfef6910e0c879bf82'  # M theo walcott
-        consumer = self.c.get_consumer(consumer_id)
-        self.assertRegexpMatches(consumer, h.regx_pattern_id())
+    def delete(self):
+        pass
 
 
 class TestAppModel(unittest.TestCase):
@@ -160,6 +182,9 @@ class TestAppModel(unittest.TestCase):
         result = self.am.get_all()
         self.assertIsNotNone(result.get('items'))
 
+    def delete(self):
+        pass
+
 
 class TestTokenGetter(unittest.TestCase):
 
@@ -174,6 +199,7 @@ class TestTokenGetter(unittest.TestCase):
     def test_is_valid_token(self):
 
         # set up for an unexpired token (assuming self.tg object is created just a moments ago, this is a valid token)
+        self.tg.renew_access_token()
         is_valid = self.tg._is_valid_token(self.tg._token)
         self.assertEqual(True, is_valid)
 
