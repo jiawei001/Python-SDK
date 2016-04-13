@@ -159,52 +159,80 @@ class Enrollment(object):
 
 class Analysis(object):
 
-    def __init__(self, token, model, consumer, hosted_audio_url, num_words):
+    def __init__(self, token, model, consumer, payload):
         self.token = token
+        self.model = model  # a valid model object
+        self.consumer = consumer  # a valid consumer object
+        self.payload = self.set_payload(payload)
         self.task_name = None
         self.task_status = None
-        self.app_model = model
-        self.consumer = consumer
-        self.hosted_audio_url = hosted_audio_url
-        self.num_words = num_words
 
-    @property
-    def payload(self):
-        p = {
-            "audioUrl": self.hosted_audio_url,
-            "words": self.num_words
-        }
-        return p
+    def set_payload(self, kwargs):
+        """ setter method for attribute payload which validates and stores parameters for creating Analysis Endpoint
+        :param kwargs: the parameters you want to set to while creating analysis endpoint
+        """
+
+        # the parameter num_words mentioned in the APIs doc is wrong, it should actually be "words" instead
+        mandatory_fields = ['audioUrl', 'words']
+        all_mandatory_fields_present = all([x in kwargs.keys() for x in mandatory_fields])
+
+        try:
+            if not all_mandatory_fields_present:
+                error_text = 'Must provide all mandatory fields: ' + str(mandatory_fields)
+                raise ImproperArgumentsException(error_text)
+        except ImproperArgumentsException as e:
+            print('Error while creating app model. ' + str(e))
+            return None
+
+        self.payload = kwargs
+        return self.payload
 
     def start_task(self):
-
+        """ starts the analysis process on the supplied .wav file, and returns the task_name (unique-id)
+        """
         headers = authorization_header(developer_id=self.consumer.consumer_token)
-        endpoint_analysis_url = g.config['URL_ANALYSIS']
-        response = requests.post(endpoint_analysis_url, json=self.payload, headers=headers)
 
-        if response and response.content:
-            result = json.loads(response.content)
-            self.task_name = result.get('taskName')
-            self.task_name = result.get('taskStatus')
-            return result
+        try:
+            endpoint_analysis_url = g.config['URL_ANALYSIS']
+            response = requests.post(endpoint_analysis_url, json=self.payload, headers=headers)
 
-        return None
+            if response and response.status_code == 200:
+                result = json.loads(response.content)
+                self.task_name = result.get('taskName')
+                self.task_name = result.get('taskStatus')
+                return result
+            else:
+                return response.content
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
 
     def check_status(self, task_name):
+        """ returns the current status of an already started task
+        """
+
         headers = authorization_header(developer_id=self.consumer.consumer_token)
-        # for endpointAnalysis-id-get, the trailing word 'url' needs to be removed
-        endpoint_analysis_url = re.sub('url$', str(task_name), g.config['URL_ANALYSIS'])
 
-        response = requests.get(endpoint_analysis_url, headers=headers)
+        try:
+            # for endpointAnalysis-id-get, the trailing word 'url' needs to be removed
+            endpoint_analysis_url = re.sub(r'url$', str(task_name), g.config['URL_ANALYSIS'])
+            response = requests.get(endpoint_analysis_url, headers=headers)
 
-        if response and response.content:
-            result = json.loads(response.content)
-            return result
+            if response and response.content:
+                result = json.loads(response.content)
+                return result
+            else:
+                return response.content
 
-        return None
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
 
     def execute_step(self):
-
+        """ combines both start_task and the check_status methods, if the status is not complete it re-attempts for
+        n number of seconds indicated by REATTEMPT_ANALYSIS_CALL_FOR config option
+        ideally should return the task_name in the result with a task_status as 'completed'
+        """
         result = None
         status_timestamp = None
         status_time_lapse = 0
@@ -221,7 +249,7 @@ class Analysis(object):
             print('task_status: ' + str(self.task_status))
 
             while unicode(self.task_status) != u'completed' \
-                    and status_time_lapse < float(g.config['REATTEMPT_CALL_FOR']):
+                    and status_time_lapse < float(g.config['REATTEMPT_ANALYSIS_CALL_FOR']):
 
                 time.sleep(1)
                 result = self.check_status(self.task_name)

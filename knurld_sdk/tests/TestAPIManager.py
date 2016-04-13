@@ -56,31 +56,43 @@ class TestEnrollment(unittest.TestCase):
 
 class TestAnalysis(unittest.TestCase):
 
-    hosted_audio_url = 'https://www.dropbox.com/s/uawm0lb0p3zl4nj/enrollment.wav?dl=1'
-    model_id = '3c1bbea5f380bcbfef6910e0c879bd04'  # "boston", "chicago", "san francisco"
-    # consumer = Consumer(temp_token(), username='theo', password='walcott')  # M theo walcott
+    ap = {
+        "vocabulary": ["boston", "chicago", "pyramid"],
+        "verificationLength": 3,
+        "enrollmentRepeats": 3
+    }
+    test_app_model = AppModel(temp_token(), payload=ap)
 
-    @property
-    def analysis(self):
-        a = Analysis(temp_token(), self.model_id, self.consumer, self.hosted_audio_url, num_words=3)
-        return a
+    cp = {
+        # a unique username for testing
+        "username": 'theo_' + str(datetime.now()),
+        "password": 'walcott',
+        "gender": 'M'
+    }
+    test_consumer = Consumer(token=temp_token(), payload=cp)
+
+    p = {
+        "audioUrl": 'https://www.dropbox.com/s/uawm0lb0p3zl4nj/enrollment.wav?dl=1',
+        "words": '3'
+    }
+    a = Analysis(temp_token(), test_app_model, test_consumer, payload=p)
 
     def test_start_task(self):
-        result = self.analysis.start_task()
+        result = self.a.start_task()
         self.assertIsNotNone(result)
         self.assertEqual(result.get('taskStatus'), 'started')
         self.assertRegexpMatches(result.get('taskName'), h.regx_pattern_id())
 
     def test_check_status(self):
-        result = self.analysis.start_task()
+        result = self.a.start_task()
         test_task_name = result.get('taskName')
-        result = self.analysis.check_status(test_task_name)
+        result = self.a.check_status(test_task_name)
         self.assertIsNotNone(result)
         self.assertIn(result.get('taskStatus'), ['running', 'completed'])
 
     def test_execute_step(self):
-        result = self.analysis.execute_step()
-        print(result)
+        result = self.a.execute_step()
+        self.assertIsNotNone(result)
 
 
 class TestConsumer(unittest.TestCase):
