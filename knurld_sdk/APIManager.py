@@ -9,6 +9,7 @@ from datetime import datetime
 from knurld_sdk import app_globals as g
 from knurld_sdk import helpers as h
 from knurld_sdk.uploader.Dropbox import upload, share, dropbox_client
+from knurld_sdk.CustomExceptions import ImproperArgumentsException
 
 
 def authorization_header(token=None, content_type='application/json', developer_id=None):
@@ -255,11 +256,9 @@ class Consumer(object):
         }
         return p
 
-    # TODO: upsert to - create and update
-    def upsert_consumer(self, payload, consumer_id=None):
+    def create(self):
         """
-        TODO: convert it as per the following definition using consumer_id
-        update or insert the app model
+        create the app model
         :param
         payload (e.g. format) = {
             "gender": "M",
@@ -272,37 +271,79 @@ class Consumer(object):
 
         headers = authorization_header()
 
-        url = g.config['URL_CONSUMERS']
-        if consumer_id:
-            url += '/' + consumer_id
+        try:
+            url = g.config['URL_CONSUMERS']
 
-        response = requests.post(url, json=payload, headers=headers)
-        self.consumer_url = json.loads(response.content).get('href')
+            response = requests.post(url, json=self.payload, headers=headers)
+            self.consumer_url = json.loads(response.content).get('href')
 
-        return self.consumer_id
+            return self.consumer_id
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
 
-    def get_consumer(self, consumer_id=None):
+    def update(self, consumer_id):
+        """
+        update the app model
+        :param
+        payload (e.g. format) = {
+            "gender": "M",
+            "username": "theo",
+            "password": "walcott"
+        }
+        consumer_id: an existing consumer_id
+        :return: href for the created or updated consumer
+        """
 
         headers = authorization_header()
 
-        url = g.config['URL_CONSUMERS']
-        if consumer_id:
-            url += '/' + consumer_id
+        try:
+            url = g.config['URL_CONSUMERS']
+            if consumer_id:
+                url += '/' + consumer_id
 
-        response = requests.get(url, headers=headers)
-        result = json.loads(response.content)
+            response = requests.post(url, json=self.payload, headers=headers)
+            self.consumer_url = json.loads(response.content).get('href')
 
-        # if you are getting multiple consumers in result
-        if result.get('items'):
-            for item in result.get('items'):
-                print item.get('href')
-            # set the first one from result to be the consumer for this result
-            self.consumer_url = result.get('items')[0].get('href')
-        elif result.get('href'):
-            print result.get('href')
-            self.consumer_url = result.get('href')
+            return self.consumer_id
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
 
-        return self.consumer_id
+    def get(self, consumer_id):
+
+        headers = authorization_header()
+
+        try:
+            url = g.config['URL_CONSUMERS']
+            if consumer_id:
+                url += '/' + consumer_id
+
+            response = requests.get(url, headers=headers)
+            result = json.loads(response.content)
+
+            if result.get('href'):
+                self.consumer_url = result.get('href')
+
+            return self.consumer_id
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+    def get_all(self, offset=None):
+
+        headers = authorization_header()
+
+        try:
+            url = g.config['URL_CONSUMERS']
+
+            response = requests.get(url, headers=headers)
+            result = json.loads(response.content)
+            return result
+
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
 
     def get_token(self):
         """ returns consumer specific token based on the given user
@@ -322,10 +363,13 @@ class Consumer(object):
 
 
 class AppModel(object):
+    """ The application model class that wraps Knurld API resources for application models
+    Endpoint: https://api.knurld.io/v1/app-models
+    """
 
-    def __init__(self, token):
+    def __init__(self, token, payload):
         self.token = token
-        self.payload = None
+        self.payload = self.set_payload(payload)
         self.app_model_url = None
 
     @property
@@ -333,80 +377,118 @@ class AppModel(object):
         if self.app_model_url:
             return h.parse_id_from_href(self.app_model_url)
 
-    def set_payload(self, **kwargs):
-        """ Accepts keyword arguments
+    def set_payload(self, kwargs):
+        """ setter method for attribute payload which validates and stores parameters for app model creation
+        :param kwargs: the parameters you want to set to while creating an app model
         """
 
         mandatory_fields = ['vocabulary', 'verificationLength', 'enrollmentRepeats']
         all_mandatory_fields_present = all([x in kwargs.keys() for x in mandatory_fields])
 
-        if not all_mandatory_fields_present:
-            print('Must provide all mandatory fields: ' + str(mandatory_fields))
+        try:
+            if not all_mandatory_fields_present:
+                error_text = 'Must provide all mandatory fields: ' + str(mandatory_fields)
+                raise ImproperArgumentsException(error_text)
+        except ImproperArgumentsException as e:
+            print('Error while creating app model. ' + str(e))
             return None
 
         self.payload = kwargs
+        return self.payload
 
     def create(self):
+        """ create an app model using this method. Uses the payload dictionary set during object initialization
         """
-        :param
-        payload (e.g. format) = {
-                "vocabulary": ["boston", "chicago", "pyramid"],
-                "verificationLength": 3,
-                "enrollmentRepeats": 3
-            }
-        :return: href for the created or updated app model
+        headers = authorization_header()
+        try:
+            url = g.config['URL_APP_MODELS']
+
+            response = requests.post(url, json=self.payload, headers=headers)
+            if response.status_code == 201:
+                self.app_model_url = json.loads(response.content).get('href')
+                return self.app_model_id
+            else:
+                return response
+
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+    def update(self, app_model_id, payload_override=None):
+        """ update an app model using this method. Uses the payload dictionary set during object initialization
+        :param app_model_id: existing app model id
+        :param payload_override: a complete new payload developer might want to set
+        """
+        headers = authorization_header()
+        try:
+            url = g.config['URL_APP_MODELS'] + '/' + app_model_id
+            if payload_override:
+                self.payload = payload_override
+
+            response = requests.post(url, json=self.payload, headers=headers)
+            print(response)
+            if response.status_code == 202:
+                self.app_model_url = json.loads(response.content).get('href')
+                return self.app_model_id
+            else:
+                # TODO: log errors
+                print(response.status_code)
+                print(response.content)
+                return response
+
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+    def get(self, app_model_id):
+        """ get an app model associated with a particular app_model_id.
         """
 
         headers = authorization_header()
 
-        url = g.config['URL_APP_MODELS']
+        try:
+            url = g.config['URL_APP_MODELS'] + '/' + app_model_id
 
-        # TODO: try catch
-        response = requests.post(url, json=self.payload, headers=headers)
-        self.app_model_url = json.loads(response.content).get('href')
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                result = json.loads(response.content)
+                if result.get('href'):
+                    self.app_model_url = result.get('href')
+            else:
+                # TODO: log errors
+                print(response.status_code)
+                print(response.content)
+                return response
 
-        return self.app_model_id
-
-    def update(self, app_model_id=None):
-        """
-        TODO: convert it as per the following definition using app_model_id
-        update or insert the app model
-        :param
-        payload (e.g. format) = {
-                "vocabulary": ["boston", "chicago", "pyramid"],
-                "verificationLength": 3,
-                "enrollmentRepeats": 3
-            }
-        app_model_id: an existing app model
-        :return: href for the created or updated app model
-        """
-
-        headers = authorization_header()
-
-        url = g.config['URL_APP_MODELS']
-        if app_model_id:
-            url += '/' + app_model_id
-
-        # TODO: try catch
-        response = requests.post(url, json=self.payload, headers=headers)
-        self.app_model_url = json.loads(response.content).get('href')
-
-        return self.app_model_id
-
-    def get_app_model(self, app_model_id=None):
-
-        headers = authorization_header()
-
-        url = g.config['URL_APP_MODELS']
-        if app_model_id:
-            url += '/' + app_model_id
-
-        response = requests.get(url, headers=headers)
-        result = json.loads(response.content)
-        if result.get('href'):
-            self.app_model_url = result.get('href')
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
 
         return result
+
+    @staticmethod
+    def get_all(offset=None):
+        """ get a range of available app models
+        TODO: provide pagination using offsets
+        """
+        headers = authorization_header()
+        try:
+            url = g.config['URL_APP_MODELS']
+
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                result = json.loads(response.content)
+            else:
+                return response
+
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+        return result
+
+    def delete(self):
+        pass
 
 
 class TokenGetter(object):

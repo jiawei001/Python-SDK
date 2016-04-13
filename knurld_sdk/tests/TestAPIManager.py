@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from knurld_sdk.APIManager import TokenGetter, AppModel, Consumer, Enrollment, Analysis
 from knurld_sdk import helpers as h
+from knurld_sdk.CustomExceptions import ImproperArgumentsException
 
 
 def temp_token():
@@ -110,30 +111,54 @@ class TestConsumer(unittest.TestCase):
 
 
 class TestAppModel(unittest.TestCase):
+    p = {
+        "vocabulary": ["boston", "chicago", "pyramid"],
+        "verificationLength": 3,
+        "enrollmentRepeats": 3
+    }
+    am = AppModel(temp_token(), payload=p)
+    test_app_model_id = am.create()
 
-    am = AppModel(temp_token())
+    def test_bad_payload(self):
+        payload = {
+            "vocabulary": ["boston", "chicago", "pyramid"],
+            "enrollmentRepeats": 3
+        }
+        self.assertIsNone(self.am.set_payload(payload))
 
-    def test_upsert_app_model(self):
-
+    def test_good_payload(self):
         payload = {
             "vocabulary": ["boston", "chicago", "pyramid"],
             "verificationLength": 3,
             "enrollmentRepeats": 3
         }
+        self.assertIsNotNone(self.am.set_payload(payload))
 
-        # TODO: currently the upsert method can only create an app model, so modify this test when it's method evolves
-        app_model = self.am.upsert_app_model(payload)
-        self.assertRegexpMatches(app_model, h.regx_pattern_id())
+    def test_create(self):
+        self.assertRegexpMatches(self.test_app_model_id, h.regx_pattern_id())
 
-    def test_get_app_model(self):
+    def test_update(self):
+        self.assertRegexpMatches(self.test_app_model_id, h.regx_pattern_id())
 
-        app_model = self.am.get_app_model()
-        self.assertRegexpMatches(app_model, h.regx_pattern_id())
+        payload = {
+            "enrollmentRepeats": 3,
+            "threshold": 0,
+            "autoThresholdEnable": False,
+            "autoThresholdClearance": 0,
+            "autoThresholdMaxRise": 0,
+            "useModelUpdate": False,
+            "modelUpdateDailyLimit": 0
+        }
+        app_model_id = self.am.update(app_model_id=self.test_app_model_id, payload_override=payload)
+        self.assertRegexpMatches(app_model_id, h.regx_pattern_id())
 
-        # test for specific model id
-        model_id = '3c1bbea5f380bcbfef6910e0c879bd04'  # "boston", "chicago", "san francisco"
-        app_model = self.am.get_app_model(model_id)
-        self.assertRegexpMatches(app_model, h.regx_pattern_id())
+    def test_get(self):
+        result = self.am.get(self.test_app_model_id)
+        self.assertIsNotNone(result.get('href'))
+
+    def test_get_all(self):
+        result = self.am.get_all()
+        self.assertIsNotNone(result.get('items'))
 
 
 class TestTokenGetter(unittest.TestCase):
