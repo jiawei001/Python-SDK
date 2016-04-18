@@ -40,10 +40,10 @@ class Verification(object):
 
 class Enrollment(object):
 
-    def __init__(self, token, model, consumer):
+    def __init__(self, token, app_model_id, consumer_id):
         self.token = token
-        self.app_model = model
-        self.consumer = consumer
+        self.app_model_id = app_model_id
+        self.consumer_id = consumer_id
         self.enrollment_url = None
 
     @property
@@ -53,8 +53,8 @@ class Enrollment(object):
     @property
     def payload(self):
         p = {
-            "application": self.app_model,
-            "consumer": self.consumer
+            "application": self.app_model_id,
+            "consumer": self.consumer_id
         }
         return p
 
@@ -67,31 +67,33 @@ class Enrollment(object):
             url = g.config['URL_ENROLLMENTS']
 
             response = requests.post(url, json=self.payload, headers=headers)
-            return h.get_response_content(response)
+            if response.status_code == 201:
+                result = json.loads(response.content)
+                self.enrollment_url = result.get('href')
+                return self.enrollment_id
+            else:
+                return response.status_code, response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
             return None
 
-    def update(self, enrollment_id, wav_file=None, intervals=None):
-
-        if not enrollment_id:
-            print('Enrollment Id is required.')
-            return None
-
+    def update(self, enrollment_id, payload_update):
+        """ update existing app-model with a payload containing wav_file and/or intervals
+        """
+        # TODO: could change this to use the consumer specific tokens in the future, with developer_id param
         headers = authorization_header()
-
-        if wav_file:
-            self.payload['enrollment.wav'] = wav_file
-
-        if intervals:
-            self.payload['intervals'] = intervals
 
         try:
             url = g.config['URL_ENROLLMENTS'] + '/' + enrollment_id
+            response = requests.post(url, json=payload_update, headers=headers)
 
-            response = requests.post(url, json=self.payload, headers=headers)
-            return h.get_response_content(response)
+            if response.status_code == 202:
+                result = json.loads(response.content)
+                self.enrollment_url = result.get('href')
+                return self.enrollment_id
+            else:
+                return response.status_code, response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
@@ -106,64 +108,88 @@ class Enrollment(object):
             url = g.config['URL_ENROLLMENTS'] + '/' + enrollment_id
 
             response = requests.get(url, headers=headers)
-            return h.get_response_content(response)
+            if response.status_code == 200:
+                result = json.loads(response.content)
+                self.enrollment_url = result.get('href')
+                return result
+            else:
+                return response.status_code, response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
             return None
 
-    def get_all(self, start=0, end=10, offset=10):
+    @staticmethod
+    def get_all(start=0, end=10, offset=10):
         """ return all the enrollments for given offset, start, end
             TODO: the proper usage of parameters
         """
-
         headers = authorization_header()
 
         try:
             url = g.config['URL_ENROLLMENTS']
 
             response = requests.get(url, headers=headers)
-            return h.get_response_content(response)
+            if response.status_code == 200:
+                result = json.loads(response.content)
+                return result
+            else:
+                # TODO: log errors
+                print(response.status_code)
+                print(response.content)
+                return response.status_code, response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
             return None
 
-    def steps(self, recorded_file_url):
-        # step-1: put consumer_id, model_id
-        response = self.create()
-        self.enrollment_url = h.parse_response(response, get_field='href')
+    def steps(self, payload_update):
+
+        # step-1: put consumer_id, model_id then the self.enrollment_id will be set automatically upon successful create
+        _ = self.create()
         print('step-1: create: put consumer_id, model_id: self.enrollment_id ' + str(self.enrollment_id))
 
-        # step-2: get consumer token
-        consumer_token = self.consumer.get_token()
-        print('step-2: get consumer token: consumer_token: ' + str(consumer_token))
+        # step-2: get consumer token, to be used instead of the admin token in the header
+        # consumer_token = self.consumer.get_token()
+        # print('step-2: get consumer token: consumer_token: ' + str(consumer_token))
 
         # step-3: get enrollment instructions
-        res = self.get(self.enrollment_id)
+        instructions = self.get(self.enrollment_id)
+        print('Follow these instructions to Enroll properly: ' + str(instructions))
 
-        # step-4: record the .wav file
+        # step-4: record the .wav file - this should now be the part of the payload_update passed to this method
         # this step is independent of the other operations in this method
         # recorded_file_url = record_upload_share
 
         # step-5: get the endpoint analysis for the recorded .wav file
+        # try:
+        #    payload_update['audioUrl'] = payload_update.pop('enrollment.wav')
+        # except KeyError as e:
+        #    print("Your payload update must have 'enrollment.wav' key having a recorded file url as its value.")
+        #    return None
 
-        hosted_audio_url = 'https://www.dropbox.com/s/uawm0lb0p3zl4nj/enrollment.wav?dl=1'
-        a = Analysis(consumer_token, hosted_audio_url, num_words=3, )
-        intervals = res.get('intervals')
+        # a = Analysis(self.token, self.app_model_id, self.consumer_id, payload=payload_update)
+        # task_name = a.start_task()
+        # completed_task_name = a.check_status(task_name)
+        # intervals = instructions.get('intervals')
+
+        # build the intervals for enrollment
 
         # step-6: post the .wav file along with the intervals, complete enrollment
-        response = self.update(self.enrollment_id, wav_file=hosted_audio_url, intervals=intervals)
+        response = self.update(self.enrollment_id, payload_update=payload_update)
         print(response)
+        return response
 
 
 class Analysis(object):
 
-    def __init__(self, token, model, consumer, payload):
+    def __init__(self, token, model_id, consumer_id, payload=None):
         self.token = token
-        self.model = model  # a valid model object
-        self.consumer = consumer  # a valid consumer object
-        self.payload = self.set_payload(payload)
+        self.model_id = model_id
+        self.consumer_id = consumer_id
+        if payload:
+            # read-only objects do not need to set the payload
+            self.payload = self.set_payload(payload)
         self.task_name = None
         self.task_status = None
 
@@ -172,8 +198,7 @@ class Analysis(object):
         :param kwargs: the parameters you want to set to while creating analysis endpoint
         """
 
-        # the parameter num_words mentioned in the APIs doc is wrong, it should actually be "words" instead
-        mandatory_fields = ['audioUrl', 'words']
+        mandatory_fields = ['audioUrl']
         all_mandatory_fields_present = all([x in kwargs.keys() for x in mandatory_fields])
 
         try:
@@ -190,28 +215,29 @@ class Analysis(object):
     def start_task(self):
         """ starts the analysis process on the supplied .wav file, and returns the task_name (unique-id)
         """
-        headers = authorization_header(developer_id=self.consumer.consumer_token)
+        # could change this to use the consumer specific tokens in the future, with developer_id param
+        headers = authorization_header()
 
         try:
             endpoint_analysis_url = g.config['URL_ANALYSIS']
             response = requests.post(endpoint_analysis_url, json=self.payload, headers=headers)
-
             if response and response.status_code == 200:
                 result = json.loads(response.content)
                 self.task_name = result.get('taskName')
                 self.task_name = result.get('taskStatus')
                 return result
             else:
-                return response.content
+                return response.status_code, response.content
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
             return None
 
-    def check_status(self, task_name):
+    @staticmethod
+    def check_status(task_name):
         """ returns the current status of an already started task
         """
-
-        headers = authorization_header(developer_id=self.consumer.consumer_token)
+        # could change this to use the consumer specific tokens in the future, with developer_id param
+        headers = authorization_header()
 
         try:
             # for endpointAnalysis-id-get, the trailing word 'url' needs to be removed
@@ -222,7 +248,7 @@ class Analysis(object):
                 result = json.loads(response.content)
                 return result
             else:
-                return response.content
+                return response.status_code, response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
@@ -251,7 +277,7 @@ class Analysis(object):
             while unicode(self.task_status) != u'completed' \
                     and status_time_lapse < float(g.config['REATTEMPT_ANALYSIS_CALL_FOR']):
 
-                time.sleep(1)
+                time.sleep(0.01)
                 result = self.check_status(self.task_name)
                 self.task_status = result.get('taskStatus')
                 status_time_lapse = (datetime.now() - status_timestamp).total_seconds()
@@ -264,9 +290,11 @@ class Analysis(object):
 
 class Consumer(object):
 
-    def __init__(self, token, payload):
+    def __init__(self, token, payload=None):
         self.token = token
-        self.payload = self.set_payload(payload)
+        if payload:
+            # read-only objects do not need to set the payload
+            self.payload = self.set_payload(payload)
         self.consumer_url = None
         self.consumer_token = None
 
@@ -317,7 +345,7 @@ class Consumer(object):
                 self.consumer_url = json.loads(response.content).get('href')
                 return self.consumer_id
             else:
-                return response.content
+                return response.status_code, response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
@@ -347,7 +375,7 @@ class Consumer(object):
                 self.consumer_url = json.loads(response.content).get('href')
                 return self.consumer_id
             else:
-                return response.content
+                return response.status_code, response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
@@ -369,7 +397,7 @@ class Consumer(object):
                 # TODO: log errors
                 print(response.status_code)
                 print(response.content)
-                return response.content
+                return response.status_code, response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
@@ -393,7 +421,7 @@ class Consumer(object):
                 # TODO: log errors
                 print(response.status_code)
                 print(response.content)
-                return response.content
+                return response.status_code, response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
@@ -421,9 +449,11 @@ class AppModel(object):
     Endpoint: https://api.knurld.io/v1/app-models
     """
 
-    def __init__(self, token, payload):
+    def __init__(self, token, payload=None):
         self.token = token
-        self.payload = self.set_payload(payload)
+        if payload:
+            # read-only objects do not need to set the payload
+            self.payload = self.set_payload(payload)
         self.app_model_url = None
 
     @property
@@ -435,7 +465,6 @@ class AppModel(object):
         """ setter method for attribute payload which validates and stores parameters for app model creation
         :param kwargs: the parameters you want to set to while creating an app model
         """
-
         mandatory_fields = ['vocabulary', 'verificationLength', 'enrollmentRepeats']
         all_mandatory_fields_present = all([x in kwargs.keys() for x in mandatory_fields])
 
@@ -462,7 +491,7 @@ class AppModel(object):
                 self.app_model_url = json.loads(response.content).get('href')
                 return self.app_model_id
             else:
-                return response.content
+                return response.status_code, response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
@@ -487,7 +516,7 @@ class AppModel(object):
                 # TODO: log errors
                 print(response.status_code)
                 print(response.content)
-                return response.content
+                return response.status_code, response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
@@ -511,7 +540,7 @@ class AppModel(object):
                 # TODO: log errors
                 print(response.status_code)
                 print(response.content)
-                return response.content
+                return response.status_code, response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
@@ -532,7 +561,7 @@ class AppModel(object):
             if response.status_code == 200:
                 result = json.loads(response.content)
             else:
-                return response.content
+                return response.status_code, response.content
 
         except Exception as e:
             print('Could not perform the operation: ' + str(e))

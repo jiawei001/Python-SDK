@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 
 from knurld_sdk.APIManager import TokenGetter, AppModel, Consumer, Enrollment, Analysis
 from knurld_sdk import helpers as h
-from knurld_sdk.CustomExceptions import ImproperArgumentsException
 
 
 def temp_token():
@@ -19,39 +18,51 @@ class TestVerification(unittest.TestCase):
 
 
 class TestEnrollment(unittest.TestCase):
-
-    model_id = '3c1bbea5f380bcbfef6910e0c879bd04'  # "boston", "chicago", "san francisco"
-    consumer_id = '3c1bbea5f380bcbfef6910e0c879bf82'  # M theo walcott
-    enrollment_id = '5571c3a5c203f17826740e9019832ff8'  # M theo walcott
-    e = Enrollment(temp_token(), model_id, consumer_id)
-
-    hosted_audio_url = 'https://www.dropbox.com/s/uawm0lb0p3zl4nj/enrollment.wav?dl=1'
+    test_model_id = '3c1bbea5f380bcbfef6910e0c879bd04'  # "boston", "chicago", "san francisco"
+    test_consumer_id = '3c1bbea5f380bcbfef6910e0c879bf82'  # M theo walcott
+    e = Enrollment(temp_token(), test_model_id, test_consumer_id)
 
     def test_create(self):
-        response = self.e.create()
-        print(response)
-        self.assertIsNotNone(response)
+        enrollment_id = self.e.create()
+        print(enrollment_id)
+        self.assertRegexpMatches(enrollment_id, h.regx_pattern_id())
 
     def test_update(self):
-        intervals = list()
-        response = self.e.update(self.enrollment_id, wav_file=self.hosted_audio_url, intervals=intervals)
+        test_enrollment_id = self.e.create()
+        # a valid payload test
+        p = {
+            "enrollment.wav": h.DummyData.enrollment_wav,
+            "intervals": h.DummyData.intervals,
+        }
+        enrollment_id = self.e.update(test_enrollment_id, payload_update=p)
+        self.assertRegexpMatches(enrollment_id, h.regx_pattern_id())
 
-    """
+        # an invalid payload test
+        p = {
+            "enrollment.wav": h.DummyData.invalid_enrollment_wav,
+            "intervals": h.DummyData.incorrect_intervals,
+        }
+        status, response = self.e.update(test_enrollment_id, payload_update=p)
+        self.assertEqual(status, 400)
+        self.assertIsNotNone(response)
+
     def test_get(self):
-        response = self.e.get_enrollment()
+        test_enrollment_id = self.e.create()
+        response = self.e.get(test_enrollment_id)
+        self.assertIsNotNone(response.get('href'))
+        self.assertIsNotNone(response.get('instructions'))
+
+    def test_get_all(self):
+        response = self.e.get_all()
         self.assertIsNotNone(response.get('items'))
 
-        enrollment_id = 'a67a3f337823e2d56ec264f8c3d6ceb5'
-        _ = self.e.get_enrollment(enrollment_id)
-        self.assertRegexpMatches(self.e.enrollment_id, h.regx_pattern_id())
-        self.assertIsNotNone(self.e.get_enrollment(enrollment_id).get('instructions'))
-
-    def test_get_consumer_token(self):
-        user = 'alexis'
-        pswd = 'sanchez'
-        consumer_token = self.e.get_consumer_token(user, pswd)
-        self.assertRegexpMatches(consumer_token, h.regx_pattern_id(count=342))
-    """
+    def test_steps(self):
+        p = {
+            "enrollment.wav": h.DummyData.enrollment_wav,
+            "intervals": h.DummyData.intervals,
+        }
+        enrollment_id = self.e.steps(payload_update=p)
+        self.assertRegexpMatches(enrollment_id, h.regx_pattern_id())
 
 
 class TestAnalysis(unittest.TestCase):
@@ -72,23 +83,27 @@ class TestAnalysis(unittest.TestCase):
     test_consumer = Consumer(token=temp_token(), payload=cp)
 
     p = {
-        "audioUrl": 'https://www.dropbox.com/s/uawm0lb0p3zl4nj/enrollment.wav?dl=1',
-        "words": '3'
+        "audioUrl": h.DummyData.enrollment_wav,
+        "words": 3
     }
     a = Analysis(temp_token(), test_app_model, test_consumer, payload=p)
 
     def test_start_task(self):
-        result = self.a.start_task()
-        self.assertIsNotNone(result)
-        self.assertEqual(result.get('taskStatus'), 'started')
-        self.assertRegexpMatches(result.get('taskName'), h.regx_pattern_id())
+        task = self.a.start_task()
+        self.assertIsNotNone(task)
+        self.assertEqual(task.get('taskStatus'), 'started')
+        self.assertRegexpMatches(task.get('taskName'), h.regx_pattern_id())
 
     def test_check_status(self):
-        result = self.a.start_task()
-        test_task_name = result.get('taskName')
+        task = self.a.start_task()
+        self.assertIsNotNone(task)
+        test_task_name = task.get('taskName')
         result = self.a.check_status(test_task_name)
-        self.assertIsNotNone(result)
+
         self.assertIn(result.get('taskStatus'), ['running', 'completed'])
+        if result.get('taskStatus') == 'completed':
+            self.assertIsNotNone(result.get('intervals'))
+            print(result.get('intervals'))
 
     def test_execute_step(self):
         result = self.a.execute_step()
