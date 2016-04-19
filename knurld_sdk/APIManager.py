@@ -35,7 +35,45 @@ def authorization_header(token=None, content_type='application/json', developer_
 
 
 class Verification(object):
-    pass
+
+    def __init__(self, token, app_model_id, consumer_id):
+        self.token = token
+        self.app_model_id = app_model_id
+        self.consumer_id = consumer_id
+        self.verification_url = None
+
+    @property
+    def verification_id(self):
+        return h.parse_id_from_href(self.verification_url)
+
+    @property
+    def payload(self):
+        p = {
+            "consumer": self.consumer_id,
+            "application": self.app_model_id
+        }
+        return p
+
+    def create(self):
+        """ create or register the verification work order
+        """
+        headers = authorization_header()
+
+        try:
+            url = g.config['URL_VERIFICATIONS']
+            response = requests.post(url, json=self.payload, headers=headers)
+            if response.status_code == 201:
+                result = json.loads(response.content)
+                self.verification_url = result.get('href')
+                return self.verification_id
+            else:
+                return response.status_code, response.content
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+    def update(self):
+        pass
 
 
 class Enrollment(object):
@@ -183,15 +221,16 @@ class Enrollment(object):
 
 class Analysis(object):
 
-    def __init__(self, token, model_id, consumer_id, payload=None):
+    def __init__(self, token, app_model_id, consumer_id, payload=None):
         self.token = token
-        self.model_id = model_id
+        self.app_model_id = app_model_id
         self.consumer_id = consumer_id
         if payload:
             # read-only objects do not need to set the payload
             self.payload = self.set_payload(payload)
         self.task_name = None
         self.task_status = None
+        self.intervals = []
 
     def set_payload(self, kwargs):
         """ setter method for attribute payload which validates and stores parameters for creating Analysis Endpoint
@@ -254,7 +293,7 @@ class Analysis(object):
             print('Could not perform the operation: ' + str(e))
             return None
 
-    def execute_step(self):
+    def steps(self):
         """ combines both start_task and the check_status methods, if the status is not complete it re-attempts for
         n number of seconds indicated by REATTEMPT_ANALYSIS_CALL_FOR config option
         ideally should return the task_name in the result with a task_status as 'completed'
@@ -285,7 +324,27 @@ class Analysis(object):
         except AttributeError as e:
             print('Analysis check status error {}'.format(e))
 
+        # set the member intervals to resulted intervals from end-point analysis
+        self.intervals = result.get('intervals')
         return result
+
+    def intervals_with_phrases(self):
+
+        try:
+            tg = TokenGetter()
+            # a read only object of app model
+            am = AppModel(tg.get_token())
+            result = am.get(self.app_model_id)
+            repetitions = result.get('enrollmentRepeats')
+            vocabulary = result.get('vocabulary')
+
+            # call to the generic helper function
+            return h.merge_intervals_with_phrases(vocabulary, repetitions, self.intervals)
+
+        except Exception as e:
+            print("Could not generate intervals with phrases. " + str(e))
+
+        return None
 
 
 class Consumer(object):

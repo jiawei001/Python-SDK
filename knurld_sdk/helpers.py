@@ -4,7 +4,7 @@ import json
 
 
 class DummyData(object):
-    enrollment_wav = 'https://www.dropbox.com/s/yk8fuesv3dyrk07/_standalone_4d6713e1-0588-11e6-8a73-f45c89aa5c97enrollment.wav?dl=1'
+    enrollment_wav = 'https://www.dropbox.com/s/q0qgr45mzc0bllj/_standalone_e9b14380-05b3-11e6-9b42-f45c89aa5c97enrollment.wav?dl=1'
     invalid_enrollment_wav = 'http://www.dropbox.com/s/33k10x2vuhhlutt/enrollment_test_solo.wav?dl=0'
     # make sure that the start and stop time intervals are at least 600 milliseconds apart
     intervals = [
@@ -104,34 +104,35 @@ class DummyData(object):
     ]
 
 
+def merge_intervals_with_phrases(vocabulary, repetitions, intervals):
+
+    def _next_word():
+        """ a generator that returns a word from vocabulary repeated to given number of repetitions
+        """
+        i = 0
+        while i < len(vocabulary):
+            for r in range(repetitions):
+                yield vocabulary[i]
+            i += 1
+
+    # make the list using the generator: _next_word()
+    words_per_interval = list(_next_word())
+
+    try:
+        for interval, word in zip(intervals, words_per_interval):
+            interval["phrase"] = word
+    except ValueError as e:
+        print("Unmatched number of intervals vs phrases." + str(e))
+
+    return intervals
+
+
 def parse_id_from_href(href):
     """ returns the trailing part of a typical 'href' field from knurld API response json
     """
 
     if href:
         return str(href.split('/')[-1])
-    return None
-
-
-def parse_response(response, get_field=None):
-    """ convert response to JSON format parse requested fields from the response object
-     received from calls to various APIs
-    :param response: dict
-    :param get_field: a specific field from the json object
-    """
-
-    try:
-        # jsonify the response object
-        response = json.loads(response)
-
-        # if there is ont=ly one item in the response
-        href = response.get('href')
-        if get_field == 'href':
-            return href
-
-    except (ValueError, AttributeError) as e:
-        print('Could not parse from the given response object: ' + str(e))
-
     return None
 
 

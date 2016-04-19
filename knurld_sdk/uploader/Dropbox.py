@@ -107,6 +107,11 @@ def get_dropbox_client():
     return None
 
 
+@property
+def dropbox_client():
+    return get_dropbox_client()
+
+
 def upload_and_share(local_file_path):
     """ example of how you can upload and share a local file in one go
     :param local_file_path: full local path of the file to be uploaded

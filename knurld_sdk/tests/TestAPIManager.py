@@ -3,7 +3,7 @@ import time
 import unittest
 from datetime import datetime, timedelta
 
-from knurld_sdk.APIManager import TokenGetter, AppModel, Consumer, Enrollment, Analysis
+from knurld_sdk.APIManager import TokenGetter, AppModel, Consumer, Enrollment, Analysis, Verification
 from knurld_sdk import helpers as h
 
 
@@ -14,13 +14,35 @@ def temp_token():
 
 
 class TestVerification(unittest.TestCase):
-    pass
+    test_model_id = '5571c3a5c203f17826740e901903cafb'  # "boston", "chicago", "pyramid"
+    test_consumer_id = '3c1bbea5f380bcbfef6910e0c879bf82'  # M theo walcott
+    e = Enrollment(temp_token(), app_model_id=test_model_id, consumer_id=test_consumer_id)
+    v = Verification(temp_token(), app_model_id=test_model_id, consumer_id=test_consumer_id)
+
+    def test_create(self):
+        p = {
+            "enrollment.wav": h.DummyData.enrollment_wav,
+            "intervals": h.DummyData.intervals,
+        }
+
+        # test_enrollment_id = self.e.steps(payload_update=p)
+        # print('Enrollment: ' + str(test_enrollment_id))
+
+        # for i in range(5):
+        #    time.sleep(0.5)
+        #    response = self.e.get(test_enrollment_id)
+        #    print('Enrollment Status: ' + str(response))
+
+        verification_id = self.v.create()
+        print('Verification: ' + str(verification_id))
+
+        self.assertRegexpMatches(verification_id, h.regx_pattern_id())
 
 
 class TestEnrollment(unittest.TestCase):
-    test_model_id = '3c1bbea5f380bcbfef6910e0c879bd04'  # "boston", "chicago", "san francisco"
+    test_model_id = '5571c3a5c203f17826740e901903cafb'  # "boston", "chicago", "pyramid"
     test_consumer_id = '3c1bbea5f380bcbfef6910e0c879bf82'  # M theo walcott
-    e = Enrollment(temp_token(), test_model_id, test_consumer_id)
+    e = Enrollment(temp_token(), app_model_id=test_model_id, consumer_id=test_consumer_id)
 
     def test_create(self):
         enrollment_id = self.e.create()
@@ -86,7 +108,7 @@ class TestAnalysis(unittest.TestCase):
         "audioUrl": h.DummyData.enrollment_wav,
         "words": 3
     }
-    a = Analysis(temp_token(), test_app_model, test_consumer, payload=p)
+    a = Analysis(temp_token(), app_model_id=test_app_model, consumer_id=test_consumer, payload=p)
 
     def test_start_task(self):
         task = self.a.start_task()
@@ -105,9 +127,19 @@ class TestAnalysis(unittest.TestCase):
             self.assertIsNotNone(result.get('intervals'))
             print(result.get('intervals'))
 
-    def test_execute_step(self):
-        result = self.a.execute_step()
+    def test_steps(self):
+        result = self.a.steps()
         self.assertIsNotNone(result)
+        self.assertEqual(result.get('taskStatus'), 'completed')
+        self.assertIsNotNone(result.get('intervals'))
+
+    def test_intervals_with_phrases(self):
+        result = self.a.steps()
+        intervals = result.get('intervals')
+        modified_intervals = h.merge_intervals_with_phrases(self.ap.get('vocabulary'),
+                                                            self.ap.get('enrollmentRepeats'),
+                                                            intervals)
+        self.assertIsNotNone(modified_intervals)
 
 
 class TestConsumer(unittest.TestCase):
@@ -205,9 +237,14 @@ class TestAppModel(unittest.TestCase):
         result = self.am.get(self.test_app_model_id)
         self.assertIsNotNone(result.get('href'))
 
+        # read only app model
+        test_model_id = '5571c3a5c203f17826740e901903cafb'  # "boston", "chicago", "pyramid"
+        ro_am = AppModel(temp_token(), payload=None)
+        ro_am.get(test_model_id)
+
     def test_get_all(self):
         result = self.am.get_all()
-        self.assertIsNotNone(result.get('items'))
+        self.assertIsNotNone(result.get('href'))
 
     def delete(self):
         pass
