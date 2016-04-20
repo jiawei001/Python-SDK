@@ -62,6 +62,8 @@ class Verification(object):
         try:
             url = g.config['URL_VERIFICATIONS']
             response = requests.post(url, json=self.payload, headers=headers)
+            print(response)
+            print(response.content)
             if response.status_code == 201:
                 result = json.loads(response.content)
                 self.verification_url = result.get('href')
@@ -72,8 +74,138 @@ class Verification(object):
             print('Could not perform the operation: ' + str(e))
             return None
 
-    def update(self):
-        pass
+    def update(self, verification_id, payload_update):
+        """ update existing verification work order with a payload containing wav_file and/or intervals
+        :param verification_id: existing verification id you receive upon create
+        :param payload_update: e.g.
+                {
+                    "verification.wav": "",
+                    "intervals": [
+                        {
+                            "phrase": "",
+                            "start": 0,
+                            "stop": 0
+                        },
+                        { .... }
+                    ]
+                }
+        """
+        # TODO: could change this to use the consumer specific tokens in the future, with developer_id param to headers
+        headers = authorization_header()
+
+        try:
+            url = g.config['URL_VERIFICATIONS'] + '/' + verification_id
+            response = requests.post(url, json=payload_update, headers=headers)
+            print(response)
+            print(response.content)
+            if response.status_code == 202:
+                result = json.loads(response.content)
+                self.verification_url = result.get('href')
+                return self.verification_id
+            else:
+                return response.status_code, response.content
+
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+    def get(self, verification_id):
+        """ get verification for the given enrollment id
+        """
+        headers = authorization_header()
+
+        try:
+            url = g.config['URL_VERIFICATIONS'] + '/' + verification_id
+
+            response = requests.get(url, headers=headers)
+            print(response)
+            print(response.content)
+
+            if response.status_code == 200:
+                result = json.loads(response.content)
+                self.verification_url = result.get('href')
+                return result
+            else:
+                return response.status_code, response.content
+
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+    @staticmethod
+    def get_all(start=0, end=10, offset=10):
+        """ return all the verifications for given offset, start, end
+            TODO: the proper usage of parameters when pagination is needed
+        """
+        headers = authorization_header()
+
+        try:
+            url = g.config['URL_VERIFICATIONS']
+
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                result = json.loads(response.content)
+                return result
+            else:
+                # TODO: log errors
+                print(response.status_code)
+                print(response.content)
+                return response.status_code, response.content
+
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+    def step_one(self):
+        """ create verification and get instructions
+        """
+        # create a fresh work order for verification, here self.verification_id is set internally
+        _ = self.create()
+
+        # get the instructions for as to how to proceed with the verification
+        instructions = self.get(self.verification_id)
+        print('Follow these instructions to do proper Verification: ' + str(instructions.get('instructions')))
+
+        return instructions.get('instructions')
+
+    def step_two(self, payload_update):
+        """ using the instructions from step one developer must create the appropriate payload and pass it to step_two
+        :param payload_update: e.g.
+            payload = {
+            "verification.wav": '',
+            "intervals": [
+                    {
+                    "phrase": "",
+                    "start": 0,
+                    "stop": 0
+                    },
+                    { .... }
+                ]
+            }
+        """
+        # update the verification work order with the verification.wav and intervals payload
+        status_time_lapse = 0
+        status_timestamp = datetime.now()
+        _ = self.update(self.verification_id, payload_update=payload_update)
+
+        verify_result = None
+        try:
+            verify_result = self.get(self.verification_id)
+            verify_status = verify_result.get('status')
+            while unicode(verify_status) != u'completed' \
+                    and status_time_lapse < float(g.config['REATTEMPT_CALLS_FOR']):
+                time.sleep(0.01)
+                verify_result = self.get(self.verification_id)
+                verify_status = verify_result.get('status')
+                print('* verification status: ' + str(verify_status))
+                status_time_lapse = (datetime.now() - status_timestamp).total_seconds()
+
+        except AttributeError as e:
+            print('Verification check status error {}'.format(e))
+
+        # finally, when the verification status is 'completed' return verification result
+        print('Final result of Verification: ' + str(verify_result))
+        return verify_result
 
 
 class Enrollment(object):
@@ -117,7 +249,20 @@ class Enrollment(object):
             return None
 
     def update(self, enrollment_id, payload_update):
-        """ update existing app-model with a payload containing wav_file and/or intervals
+        """ update existing enrollment work order with a payload containing wav_file and/or intervals
+        :param enrollment_id: existing enrollment id you receive upon create
+        :param: payload_update: e.g.
+                {
+                    "enrollment.wav": "",
+                    "intervals": [
+                        {
+                            "phrase": "",
+                            "start": 0,
+                            "stop": 0
+                        },
+                        { .... }
+                    ]
+                }
         """
         # TODO: could change this to use the consumer specific tokens in the future, with developer_id param
         headers = authorization_header()
@@ -125,7 +270,8 @@ class Enrollment(object):
         try:
             url = g.config['URL_ENROLLMENTS'] + '/' + enrollment_id
             response = requests.post(url, json=payload_update, headers=headers)
-
+            print(response)
+            print(response.content)
             if response.status_code == 202:
                 result = json.loads(response.content)
                 self.enrollment_url = result.get('href')
@@ -160,7 +306,7 @@ class Enrollment(object):
     @staticmethod
     def get_all(start=0, end=10, offset=10):
         """ return all the enrollments for given offset, start, end
-            TODO: the proper usage of parameters
+            TODO: the proper usage of parameters when pagination is needed
         """
         headers = authorization_header()
 
@@ -193,7 +339,7 @@ class Enrollment(object):
 
         # step-3: get enrollment instructions
         instructions = self.get(self.enrollment_id)
-        print('Follow these instructions to Enroll properly: ' + str(instructions))
+        print('Follow these instructions to do proper Enrollment: ' + str(instructions))
 
         # step-4: record the .wav file - this should now be the part of the payload_update passed to this method
         # this step is independent of the other operations in this method
@@ -214,9 +360,28 @@ class Enrollment(object):
         # build the intervals for enrollment
 
         # step-6: post the .wav file along with the intervals, complete enrollment
-        response = self.update(self.enrollment_id, payload_update=payload_update)
-        print(response)
-        return response
+
+        status_time_lapse = 0
+        status_timestamp = datetime.now()
+        enrollment_id = self.update(self.enrollment_id, payload_update=payload_update)
+        # make sure to send the enrollment id only after the status is changed to completed,
+        # limited by config param REATTEMPT_CALLS_FOR
+
+        try:
+            enroll_status = self.get(self.enrollment_id).get('status')
+            while unicode(enroll_status) != u'completed'\
+                    and status_time_lapse < float(g.config['REATTEMPT_CALLS_FOR']):
+
+                time.sleep(0.01)
+                enroll_status = self.get(self.enrollment_id).get('status')
+                print('* enrollment status: ' + str(enroll_status))
+                status_time_lapse = (datetime.now() - status_timestamp).total_seconds()
+
+        except AttributeError as e:
+            print('Enrollment check status error {}'.format(e))
+
+        # returns the enrollment_id after the enrollment status becomes 'completed'
+        return enrollment_id
 
 
 class Analysis(object):
@@ -227,6 +392,7 @@ class Analysis(object):
         self.consumer_id = consumer_id
         if payload:
             # read-only objects do not need to set the payload
+            # however if the payload is being set, it must be set right
             self.payload = self.set_payload(payload)
         self.task_name = None
         self.task_status = None
@@ -295,7 +461,7 @@ class Analysis(object):
 
     def steps(self):
         """ combines both start_task and the check_status methods, if the status is not complete it re-attempts for
-        n number of seconds indicated by REATTEMPT_ANALYSIS_CALL_FOR config option
+        n number of seconds indicated by REATTEMPT_CALLS_FOR config option
         ideally should return the task_name in the result with a task_status as 'completed'
         """
         result = None
@@ -312,13 +478,16 @@ class Analysis(object):
         try:
             print('task_name: ' + str(self.task_name))
             print('task_status: ' + str(self.task_status))
+            print('float(g.configREATTEMPT_CALLS_FOR: ' + str(float(g.config['REATTEMPT_CALLS_FOR'])))
+            print('status_time_lapse: ' + str(status_time_lapse))
 
             while unicode(self.task_status) != u'completed' \
-                    and status_time_lapse < float(g.config['REATTEMPT_ANALYSIS_CALL_FOR']):
+                    and status_time_lapse < float(g.config['REATTEMPT_CALLS_FOR']):
 
                 time.sleep(0.01)
                 result = self.check_status(self.task_name)
                 self.task_status = result.get('taskStatus')
+                print('task_status: ' + str(self.task_status))
                 status_time_lapse = (datetime.now() - status_timestamp).total_seconds()
 
         except AttributeError as e:
@@ -326,6 +495,7 @@ class Analysis(object):
 
         # set the member intervals to resulted intervals from end-point analysis
         self.intervals = result.get('intervals')
+        print('Intervals: ' + str(self.intervals))
         return result
 
     def intervals_with_phrases(self):
@@ -393,7 +563,6 @@ class Consumer(object):
         consumer_id: an existing consumer_id
         :return: href for the created or updated consumer
         """
-
         headers = authorization_header()
 
         try:
@@ -420,9 +589,7 @@ class Consumer(object):
         consumer_id: an existing consumer_id
         :return: href for the created or updated consumer
         """
-
         headers = authorization_header()
-
         try:
             url = g.config['URL_CONSUMERS'] + '/' + consumer_id
 
@@ -441,7 +608,6 @@ class Consumer(object):
             return None
 
     def get(self, consumer_id):
-
         headers = authorization_header()
 
         try:
@@ -466,7 +632,6 @@ class Consumer(object):
 
     @staticmethod
     def get_all(offset=None):
-
         headers = authorization_header()
 
         try:
@@ -542,6 +707,7 @@ class AppModel(object):
         """ create an app model using this method. Uses the payload dictionary set during object initialization
         """
         headers = authorization_header()
+
         try:
             url = g.config['URL_APP_MODELS']
 
@@ -562,6 +728,7 @@ class AppModel(object):
         :param payload_override: a complete new payload developer might want to set
         """
         headers = authorization_header()
+
         try:
             url = g.config['URL_APP_MODELS'] + '/' + app_model_id
             if payload_override:
@@ -584,7 +751,6 @@ class AppModel(object):
     def get(self, app_model_id):
         """ get an app model associated with a particular app_model_id.
         """
-
         headers = authorization_header()
 
         try:
@@ -613,6 +779,7 @@ class AppModel(object):
         TODO: provide pagination using offsets
         """
         headers = authorization_header()
+
         try:
             url = g.config['URL_APP_MODELS']
 

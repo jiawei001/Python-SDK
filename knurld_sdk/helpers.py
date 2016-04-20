@@ -1,13 +1,45 @@
 # -*- coding: utf-8 -*-
 
-import json
-
 
 class DummyData(object):
-    enrollment_wav = 'https://www.dropbox.com/s/q0qgr45mzc0bllj/_standalone_e9b14380-05b3-11e6-9b42-f45c89aa5c97enrollment.wav?dl=1'
+
+    enrollment_wav = 'https://www.dropbox.com/s/q0qgr45mzc0bllj/' \
+                     '_standalone_e9b14380-05b3-11e6-9b42-f45c89aa5c97enrollment.wav?dl=1'
+
+    verification_wav_files = {
+        "boston_chicago_pyramid.wav": {
+            "shared_url": 'https://www.dropbox.com/s/pwy9j5kqhhxvw26/'
+                          '_standalone_2074860f-0727-11e6-9ee8-f45c89aa5c97verification.wav?dl=1',
+            "intervals": [
+                {u'phrase': 'boston', u'start': 1082, u'stop': 1983},
+                {u'phrase': 'chicago', u'start': 2443, u'stop': 3403},
+                {u'phrase': 'pyramid', u'start': 4163, u'stop': 4813}
+            ]
+        },
+        "chicago_boston_pyramid.wav": {
+            "shared_url": 'https://www.dropbox.com/s/6ib49b41f0scke5/'
+                          '_standalone_32a66799-0727-11e6-a660-f45c89aa5c97verification.wav?dl=1',
+            "intervals": [
+                {u'phrase': 'chicago', u'start': 1082, u'stop': 1902},
+                {u'phrase': 'boston', u'start': 2503, u'stop': 3353},
+                {u'phrase': 'pyramid', u'start': 4083, u'stop': 4752}
+            ]
+        },
+        "pyramid_boston_chicago.wav": {
+            "shared_url": 'https://www.dropbox.com/s/kkf3r2lutd6z9j6/'
+                          '_standalone_3d87ed26-0727-11e6-b52c-f45c89aa5c97verification.wav?dl=1',
+            "intervals": [
+                {u'phrase': 'pyramid', u'start': 1152, u'stop': 2072},
+                {u'phrase': 'boston', u'start': 2433, u'stop': 3263},
+                {u'phrase': 'chicago', u'start': 3953, u'stop': 4743}
+            ]
+        }
+    }
+
     invalid_enrollment_wav = 'http://www.dropbox.com/s/33k10x2vuhhlutt/enrollment_test_solo.wav?dl=0'
+
     # make sure that the start and stop time intervals are at least 600 milliseconds apart
-    intervals = [
+    enrollment_intervals = [
         {
             "phrase": "boston",
             "start": 822,
@@ -55,7 +87,7 @@ class DummyData(object):
         }
     ]
 
-    incorrect_intervals = [
+    invalid_enrollment_intervals = [
         {
             "phrase": "boston",
             "start": 892,   # this is not 600 milliseconds apart, hence non-acceptable

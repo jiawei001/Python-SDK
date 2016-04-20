@@ -112,33 +112,42 @@ def dropbox_client():
     return get_dropbox_client()
 
 
-def upload_and_share(local_file_path):
+def upload_and_share(local_file_path, file_type='enrollment'):
     """ example of how you can upload and share a local file in one go
     :param local_file_path: full local path of the file to be uploaded
+    :param file_type: indicated the purpose of this file upload (enrollment or verification)
     """
-
-    dbx = get_dropbox_client()
-    remote_path = dbx_config['REMOTE_DIR'].replace(os.path.sep, '/')
-    file_id = '_standalone_' + str(uuid.uuid1())
-    audio_filename = str(file_id) + dbx_config['FILE_NAME']
-
-    remote_file_path = '/'.join(['/', remote_path, audio_filename])
-
     try:
+        dbx = get_dropbox_client()
+        remote_path = dbx_config['REMOTE_DIR'].replace(os.path.sep, '/')
+
+        file_id = '_standalone_' + str(uuid.uuid1())
+        audio_filename = str(file_id) + dbx_config[file_type.upper() + '_FILE_NAME']  # select apt config variable
+        remote_file_path = '/'.join(['/', remote_path, audio_filename])
+
         response = upload(dbx, local_file_path, remote_file_path, overwrite=True)
         if response:
             print('{} Upload Successful!'.format(remote_file_path))
             shared_url = share(dbx, remote_file_path)
             print('{} Shared Successfully!'.format(shared_url))
             return True
-    except (ApiError, IOError, BufferError, FileMetadata) as e:
+    except (OSError, KeyError, ApiError, IOError, BufferError, FileMetadata) as e:
         print('File {} could not be uploaded or shared. {} '.format(local_file_path, e))
 
     return None
 
 if __name__ == "__main__":
 
+    e_or_v = raw_input("Purpose of upload? Enrollment(e) or Verification(v): ")
+    if e_or_v not in ['e', 'v']:
+        print("Can enter only one letter: 'e' for Enrollment or 'v' Verification")
+        exit(2)
+    file_type = 'verification' if e_or_v == 'v' else 'enrollment'
     file_to_upload = raw_input("Enter the full path of the file to be uploaded: ")
-    success = upload_and_share(local_file_path=file_to_upload)
 
-    print("Completed " + str("Successfully!!!" if success else "With Errors!"))
+    if file_to_upload:
+        success = upload_and_share(local_file_path=file_to_upload, file_type=file_type)
+        print("File upload and share completed " + str("successfully!!!" if success else "With Errors!"))
+    else:
+        print("Enter the correct full local path for file to be uploaded.")
+        exit(2)

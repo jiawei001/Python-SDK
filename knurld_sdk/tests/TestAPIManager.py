@@ -14,29 +14,83 @@ def temp_token():
 
 
 class TestVerification(unittest.TestCase):
-    test_model_id = '5571c3a5c203f17826740e901903cafb'  # "boston", "chicago", "pyramid"
+
+    test_app_model_id = '5571c3a5c203f17826740e90199fec4d'
     test_consumer_id = '3c1bbea5f380bcbfef6910e0c879bf82'  # M theo walcott
-    e = Enrollment(temp_token(), app_model_id=test_model_id, consumer_id=test_consumer_id)
-    v = Verification(temp_token(), app_model_id=test_model_id, consumer_id=test_consumer_id)
+
+    e = Enrollment(temp_token(), app_model_id=test_app_model_id, consumer_id=test_consumer_id)
+    # payload for a fresh enrollment every time
+    p = {
+        "enrollment.wav": h.DummyData.enrollment_wav,
+        "intervals": h.DummyData.enrollment_intervals,
+    }
+    test_enrollment_id = e.steps(payload_update=p)
+
+    v = Verification(temp_token(), app_model_id=test_app_model_id, consumer_id=test_consumer_id)
 
     def test_create(self):
+        """
+        -------------------------------------------------------------------------------------------------------
+        NOTE: might want to replace the hardcoded test_app_model_id
+        payload for a fresh app model (apparently the verification create test fails with a new app-model each
+         time or does not work with a old stale app model)
+
         p = {
-            "enrollment.wav": h.DummyData.enrollment_wav,
-            "intervals": h.DummyData.intervals,
+           "vocabulary": ["boston", "chicago", "pyramid"],
+           "verificationLength": 3,
+           "enrollmentRepeats": 3
+        }
+        am = AppModel(temp_token(), payload=p)
+        test_app_model_id = am.create()
+        """
+        verification_id = self.v.create()
+        self.assertRegexpMatches(verification_id, h.regx_pattern_id())
+
+    def test_update(self):
+        test_verification_id = self.v.create()
+
+        # a valid payload for verification update
+        p = {
+            "verification.wav": h.DummyData.verification_wav_files['boston_chicago_pyramid.wav']['shared_url'],
+            "intervals": h.DummyData.verification_intervals,
         }
 
-        # test_enrollment_id = self.e.steps(payload_update=p)
-        # print('Enrollment: ' + str(test_enrollment_id))
-
-        # for i in range(5):
-        #    time.sleep(0.5)
-        #    response = self.e.get(test_enrollment_id)
-        #    print('Enrollment Status: ' + str(response))
-
-        verification_id = self.v.create()
-        print('Verification: ' + str(verification_id))
-
+        verification_id = self.v.update(test_verification_id, payload_update=p)
         self.assertRegexpMatches(verification_id, h.regx_pattern_id())
+
+    def test_get(self):
+        test_verification_id = '5571c3a5c203f17826740e9019a0cd67'
+        result = self.v.get(test_verification_id)
+        self.assertIsNotNone(result)
+
+    def test_get_all(self):
+        response = self.v.get_all()
+        self.assertIsNotNone(response.get('items'))
+
+    def test_steps(self):
+
+        # manipulation for good payload: get instructions until we find the right combination
+        # Need: the verification instructions return the phrases in random order to be spoken,
+        #  consumer has to follow the order mentioned in the preceding get response
+
+        asked_wav_file = ''
+        shared_urls = [f for f in h.DummyData.verification_wav_files.keys()]
+        while asked_wav_file not in shared_urls:
+            instructions = self.v.step_one()
+            phrases = tuple(instructions.get('data').get('phrases'))
+            asked_wav_file = '_'.join(phrases).lower() + '.wav'
+            print('asked_wav_file: ' + asked_wav_file)
+
+        verification_wav_file = h.DummyData.verification_wav_files[asked_wav_file]['shared_url']
+        verification_intervals = h.DummyData.verification_wav_files[asked_wav_file]['intervals']
+
+        p = {
+            "verification.wav": verification_wav_file,
+            "intervals": verification_intervals,
+        }
+
+        verify_result = self.v.step_two(payload_update=p)
+        self.assertIsNotNone(verify_result)
 
 
 class TestEnrollment(unittest.TestCase):
@@ -54,7 +108,7 @@ class TestEnrollment(unittest.TestCase):
         # a valid payload test
         p = {
             "enrollment.wav": h.DummyData.enrollment_wav,
-            "intervals": h.DummyData.intervals,
+            "intervals": h.DummyData.enrollment_intervals,
         }
         enrollment_id = self.e.update(test_enrollment_id, payload_update=p)
         self.assertRegexpMatches(enrollment_id, h.regx_pattern_id())
@@ -62,7 +116,7 @@ class TestEnrollment(unittest.TestCase):
         # an invalid payload test
         p = {
             "enrollment.wav": h.DummyData.invalid_enrollment_wav,
-            "intervals": h.DummyData.incorrect_intervals,
+            "intervals": h.DummyData.invalid_enrollment_intervals,
         }
         status, response = self.e.update(test_enrollment_id, payload_update=p)
         self.assertEqual(status, 400)
@@ -81,7 +135,7 @@ class TestEnrollment(unittest.TestCase):
     def test_steps(self):
         p = {
             "enrollment.wav": h.DummyData.enrollment_wav,
-            "intervals": h.DummyData.intervals,
+            "intervals": h.DummyData.enrollment_intervals,
         }
         enrollment_id = self.e.steps(payload_update=p)
         self.assertRegexpMatches(enrollment_id, h.regx_pattern_id())
@@ -128,7 +182,13 @@ class TestAnalysis(unittest.TestCase):
             print(result.get('intervals'))
 
     def test_steps(self):
-        result = self.a.steps()
+        p = {
+            "audioUrl": h.DummyData.verification_wav_files['pyramid_boston_chicago.wav']['shared_url'],
+            "words": 3
+        }
+        a = Analysis(temp_token(), app_model_id=self.test_app_model, consumer_id=self.test_consumer, payload=p)
+
+        result = a.steps()
         self.assertIsNotNone(result)
         self.assertEqual(result.get('taskStatus'), 'completed')
         self.assertIsNotNone(result.get('intervals'))
