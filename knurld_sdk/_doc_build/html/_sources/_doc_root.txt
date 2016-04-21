@@ -10,12 +10,7 @@ Contents:
 
 .. toctree::
    :maxdepth: 2
-   APIManager.py
 
-        py:function:: upsert_enrollment(sequence[, start=0])
-
-           Return an iterator that yields tuples of an index and an item of the
-           *sequence*. (And so on.)
 
 
 

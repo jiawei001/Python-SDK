@@ -3,8 +3,8 @@ import time
 import unittest
 from datetime import datetime, timedelta
 
-from knurld_sdk.APIManager import TokenGetter, AppModel, Consumer, Enrollment, Analysis, Verification
 from knurld_sdk import helpers as h
+from knurld_sdk.APIManager import TokenGetter, AppModel, Consumer, Enrollment, Analysis, Verification
 
 
 def temp_token():
@@ -52,7 +52,7 @@ class TestVerification(unittest.TestCase):
         # a valid payload for verification update
         p = {
             "verification.wav": h.DummyData.verification_wav_files['boston_chicago_pyramid.wav']['shared_url'],
-            "intervals": h.DummyData.verification_intervals,
+            "intervals": h.DummyData.verification_wav_files['boston_chicago_pyramid.wav']['intervals'],
         }
 
         verification_id = self.v.update(test_verification_id, payload_update=p)

@@ -8,7 +8,6 @@ from datetime import datetime
 
 from knurld_sdk import app_globals as g
 from knurld_sdk import helpers as h
-from knurld_sdk.uploader.Dropbox import upload, share, dropbox_client
 from knurld_sdk.CustomExceptions import ImproperArgumentsException
 
 
@@ -829,7 +828,7 @@ class TokenGetter(object):
     def renew_access_token(self):
 
         headers = {'Content-Type': 'application/x-www-form-urlencoded',
-                   'Host': g.config['HOST']
+                   'Host': g.config['URL_HOST']
                    }
 
         payload = {'client_id': g.config['CLIENT_ID'],
@@ -851,13 +850,3 @@ class TokenGetter(object):
                                              expiration_time=self._token_expires,
                                              should_cache_fn=self._is_valid_token)
         return self._token
-
-
-class Recorder(object):
-
-    def record(self):
-        pass
-
-    def upload_and_share(self):
-        upload(dropbox_client(), local_file_path='', remote_file_path='')
-

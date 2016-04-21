@@ -15,3 +15,8 @@
 .coverage
 .coveragerc
 .DS_Store
+
+# sphinx documentation
+_doc_build
+_doc_static
+_doc_templates
