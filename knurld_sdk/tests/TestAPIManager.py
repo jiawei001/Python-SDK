@@ -6,6 +6,7 @@
 # license that can be found in the LICENSE file
 """
 
+import random
 import time
 import unittest
 from datetime import datetime, timedelta
@@ -159,7 +160,7 @@ class TestAnalysis(unittest.TestCase):
 
     cp = {
         # a unique username for testing
-        "username": 'theo_' + str(datetime.now()),
+        "username": 'theo_' + str(random.random()),
         "password": 'walcott',
         "gender": 'M'
     }
@@ -213,7 +214,7 @@ class TestConsumer(unittest.TestCase):
 
     p = {
         # a unique username for testing
-        "username": 'theo_' + str(datetime.now()),
+        "username": 'theo_' + str(random.random()),
         "password": 'walcott',
         "gender": 'M'
     }
@@ -226,7 +227,7 @@ class TestConsumer(unittest.TestCase):
     def test_update(self):
         p = {
             # a unique username for testing
-            "username": 'theo_' + str(datetime.now()) + '_alias',
+            "username": 'theo_' + str(random.random()) + '_alias',
             "password": 'walcott',
             "gender": 'M'
         }
@@ -241,7 +242,7 @@ class TestConsumer(unittest.TestCase):
     def test_get(self):
         p = {
             # a unique username for testing
-            "username": 'theo_' + str(datetime.now()) + '_alias',
+            "username": 'theo_' + str(random.random()) + '_alias',
             "password": 'walcott',
             "gender": 'M'
         }

@@ -41,7 +41,8 @@ def authorization_header(token=None, content_type='application/json', developer_
 
 class Verification(object):
 
-    def __init__(self, token, app_model_id, consumer_id):
+    # can leave app_model_id & consumer_id blank, for readonly objects
+    def __init__(self, token, app_model_id='', consumer_id=''):
         self.token = token
         self.app_model_id = app_model_id
         self.consumer_id = consumer_id
@@ -138,14 +139,14 @@ class Verification(object):
             return None
 
     @staticmethod
-    def get_all(start=0, end=10, offset=10):
+    def get_all(limit=10, offset=0):
         """ return all the verifications for given offset, start, end
             TODO: the proper usage of parameters when pagination is needed
         """
         headers = authorization_header()
 
         try:
-            url = g.config['URL_VERIFICATIONS']
+            url = g.config['URL_VERIFICATIONS'] + '?limit=' + str(limit) + '&offset=' + str(offset)
 
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
@@ -165,11 +166,16 @@ class Verification(object):
         """ create verification and get instructions
         """
         # create a fresh work order for verification, here self.verification_id is set internally
-        _ = self.create()
+        verification_id = self.create()
+        print('step-1: create: put verification_id, model_id: self.enrollment_id ' + str(self.verification_id))
+        if not verification_id:
+            return None
 
         # get the instructions for as to how to proceed with the verification
         instructions = self.get(self.verification_id)
         print('Follow these instructions to do proper Verification: ' + str(instructions.get('instructions')))
+        if not instructions or type(instructions) == 'tuple':
+            return None
 
         return instructions.get('instructions')
 
@@ -215,7 +221,8 @@ class Verification(object):
 
 class Enrollment(object):
 
-    def __init__(self, token, app_model_id, consumer_id):
+    # can leave app_model_id & consumer_id blank, for readonly objects
+    def __init__(self, token, app_model_id='', consumer_id=''):
         self.token = token
         self.app_model_id = app_model_id
         self.consumer_id = consumer_id
@@ -309,14 +316,14 @@ class Enrollment(object):
             return None
 
     @staticmethod
-    def get_all(start=0, end=10, offset=10):
+    def get_all(limit=10, offset=0):
         """ return all the enrollments for given offset, start, end
             TODO: the proper usage of parameters when pagination is needed
         """
         headers = authorization_header()
 
         try:
-            url = g.config['URL_ENROLLMENTS']
+            url = g.config['URL_ENROLLMENTS'] + '?limit=' + str(limit) + '&offset=' + str(offset)
 
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
@@ -335,8 +342,10 @@ class Enrollment(object):
     def steps(self, payload_update):
 
         # step-1: put consumer_id, model_id then the self.enrollment_id will be set automatically upon successful create
-        _ = self.create()
+        enrollment_id = self.create()
         print('step-1: create: put consumer_id, model_id: self.enrollment_id ' + str(self.enrollment_id))
+        if not enrollment_id:
+            return None
 
         # step-2: get consumer token, to be used instead of the admin token in the header
         # consumer_token = self.consumer.get_token()
@@ -345,6 +354,8 @@ class Enrollment(object):
         # step-3: get enrollment instructions
         instructions = self.get(self.enrollment_id)
         print('Follow these instructions to do proper Enrollment: ' + str(instructions))
+        if not instructions or type(instructions) == 'tuple':
+            return None
 
         # step-4: record the .wav file - this should now be the part of the payload_update passed to this method
         # this step is independent of the other operations in this method
@@ -374,13 +385,16 @@ class Enrollment(object):
 
         try:
             enroll_status = self.get(self.enrollment_id).get('status')
-            while unicode(enroll_status) != u'completed'\
+            while unicode(enroll_status) not in [u'completed', u'failed']\
                     and status_time_lapse < float(g.config['REATTEMPT_CALLS_FOR']):
 
                 time.sleep(0.01)
                 enroll_status = self.get(self.enrollment_id).get('status')
                 print('* enrollment status: ' + str(enroll_status))
                 status_time_lapse = (datetime.now() - status_timestamp).total_seconds()
+
+                if unicode(enroll_status) == u'failed':
+                    return None
 
         except AttributeError as e:
             print('Enrollment check status error {}'.format(e))
@@ -486,7 +500,7 @@ class Analysis(object):
             print('float(g.configREATTEMPT_CALLS_FOR: ' + str(float(g.config['REATTEMPT_CALLS_FOR'])))
             print('status_time_lapse: ' + str(status_time_lapse))
 
-            while unicode(self.task_status) != u'completed' \
+            while unicode(self.task_status) not in [u'completed', u'failed']\
                     and status_time_lapse < float(g.config['REATTEMPT_CALLS_FOR']):
 
                 time.sleep(0.01)
@@ -494,6 +508,9 @@ class Analysis(object):
                 self.task_status = result.get('taskStatus')
                 print('task_status: ' + str(self.task_status))
                 status_time_lapse = (datetime.now() - status_timestamp).total_seconds()
+
+                if unicode(self.task_status) == u'failed':
+                    return None
 
         except AttributeError as e:
             print('Analysis check status error {}'.format(e))
@@ -573,6 +590,10 @@ class Consumer(object):
         try:
             url = g.config['URL_CONSUMERS']
 
+            if not self.payload:
+                print('This seems to be a read-only object of Consumer, set the proper payload to create app model')
+                return None
+
             response = requests.post(url, json=self.payload, headers=headers)
             if response.status_code == 201:
                 self.consumer_url = json.loads(response.content).get('href')
@@ -636,11 +657,11 @@ class Consumer(object):
         return result
 
     @staticmethod
-    def get_all(offset=None):
+    def get_all(limit=10, offset=0):
         headers = authorization_header()
 
         try:
-            url = g.config['URL_CONSUMERS']
+            url = g.config['URL_CONSUMERS'] + '?limit=' + str(limit) + '&offset=' + str(offset)
 
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
@@ -716,6 +737,10 @@ class AppModel(object):
         try:
             url = g.config['URL_APP_MODELS']
 
+            if not self.payload:
+                print('This seems to be a read-only object of AppModel, set the proper payload to create app model')
+                return None
+
             response = requests.post(url, json=self.payload, headers=headers)
             if response.status_code == 201:
                 self.app_model_url = json.loads(response.content).get('href')
@@ -779,14 +804,14 @@ class AppModel(object):
         return result
 
     @staticmethod
-    def get_all(offset=None):
+    def get_all(limit=10, offset=0):
         """ get a range of available app models
         TODO: provide pagination using offsets
         """
         headers = authorization_header()
 
         try:
-            url = g.config['URL_APP_MODELS']
+            url = g.config['URL_APP_MODELS'] + '?limit=' + str(limit) + '&offset=' + str(offset)
 
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
@@ -800,8 +825,32 @@ class AppModel(object):
 
         return result
 
-    def delete(self):
-        pass
+    def delete(self, app_model_id):
+        """ delete app model with given id
+        :param app_model_id:
+        :return:
+        """
+        headers = authorization_header()
+
+        try:
+            url = g.config['URL_APP_MODELS'] + '/' + app_model_id
+
+            response = requests.delete(url, headers=headers)
+            if response.status_code == 200:
+                result = json.loads(response.content)
+                if result.get('href'):
+                    self.app_model_url = result.get('href')
+            else:
+                # TODO: log errors
+                print(response.status_code)
+                print(response.content)
+                return response.status_code, response.content
+
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+        return result
 
 
 class TokenGetter(object):
