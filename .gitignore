@@ -1,5 +1,7 @@
 # Compiled python modules.
 *.pyc
+*.cfg
+*Python-SDK.git*
 
 # Setuptools distribution folder.
 /dist/
