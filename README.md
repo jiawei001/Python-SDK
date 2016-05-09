@@ -38,7 +38,7 @@ You may run the tests using pre-configured `nosetests` for ease of use. E.g.
 You may want to see the test coverage report in the documentation: {TODO link to test coverage report}
 
 ## Uploader
-You will need to upload and host your audio .wav files. For now this SDK has a helper module [Dropbox.py](https://github.com/knurld/Python-SDK/blob/master/knurld_sdk/uploader/Dropbox.py) for hosting your files on DropBox, which wraps the [Dropbox SDK](https://www.dropbox.com/developers-v1/core/start/python) using the python package for dropbox.
+You will need to upload and host your audio .wav files. For now this SDK has a helper module [Dropbox.py](https://github.com/knurld/Python-SDK/blob/master/knurld_sdk/uploader/Dropbox.py) for hosting your files on DropBox, which wraps the [Dropbox SDK.](https://www.dropbox.com/developers-v1/core/start/python)
 
 ## Packaging
 This software is packaged using the standard procedure mentioned in the [python-packaging doc.](https://python-packaging.readthedocs.org/en/latest/minimal.html)
