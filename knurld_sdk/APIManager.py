@@ -218,6 +218,33 @@ class Verification(object):
         print('Final result of Verification: ' + str(verify_result))
         return verify_result
 
+    def delete(self, verification_id):
+        """ delete verification with given id
+        :param verification_id:
+        :return: result of deletion
+        """
+        headers = authorization_header()
+
+        try:
+            url = g.config['URL_VERIFICATIONS'] + '/' + verification_id
+
+            response = requests.delete(url, headers=headers)
+            if response.status_code == 200:
+                result = json.loads(response.content)
+                if result.get('href'):
+                    self.verification_url = result.get('href')
+            else:
+                # TODO: log errors
+                print(response.status_code)
+                print(response.content)
+                return response.status_code, response.content
+
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+        return result
+
 
 class Enrollment(object):
 
@@ -402,6 +429,33 @@ class Enrollment(object):
         # returns the enrollment_id after the enrollment status becomes 'completed'
         return enrollment_id
 
+    def delete(self, enrollment_id):
+        """ delete enrollment with given id
+        :param enrollment_id:
+        :return: result of deletion
+        """
+        headers = authorization_header()
+
+        try:
+            url = g.config['URL_ENROLLMENTS'] + '/' + enrollment_id
+
+            response = requests.delete(url, headers=headers)
+            if response.status_code == 200:
+                result = json.loads(response.content)
+                if result.get('href'):
+                    self.enrollment_url = result.get('href')
+            else:
+                # TODO: log errors
+                print(response.status_code)
+                print(response.content)
+                return response.status_code, response.content
+
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+        return result
+
 
 class Analysis(object):
 
@@ -478,7 +532,7 @@ class Analysis(object):
             print('Could not perform the operation: ' + str(e))
             return None
 
-    def steps(self):
+    def steps(self, intervals_with_phrases=False):
         """ combines both start_task and the check_status methods, if the status is not complete it re-attempts for
         n number of seconds indicated by REATTEMPT_CALLS_FOR config option
         ideally should return the task_name in the result with a task_status as 'completed'
@@ -518,6 +572,9 @@ class Analysis(object):
         # set the member intervals to resulted intervals from end-point analysis
         self.intervals = result.get('intervals')
         print('Intervals: ' + str(self.intervals))
+        if intervals_with_phrases:
+            return self.intervals_with_phrases()
+
         return result
 
     def intervals_with_phrases(self):
@@ -692,6 +749,33 @@ class Consumer(object):
         except Exception as e:
             print('Could not perform the operation: ' + str(e))
             return None
+
+    def delete(self, consumer_id):
+        """ delete consumer with given id
+        :param consumer_id:
+        :return: result of deletion
+        """
+        headers = authorization_header()
+
+        try:
+            url = g.config['URL_CONSUMERS'] + '/' + consumer_id
+
+            response = requests.delete(url, headers=headers)
+            if response.status_code == 200:
+                result = json.loads(response.content)
+                if result.get('href'):
+                    self.consumer_url = result.get('href')
+            else:
+                # TODO: log errors
+                print(response.status_code)
+                print(response.content)
+                return response.status_code, response.content
+
+        except Exception as e:
+            print('Could not perform the operation: ' + str(e))
+            return None
+
+        return result
 
 
 class AppModel(object):

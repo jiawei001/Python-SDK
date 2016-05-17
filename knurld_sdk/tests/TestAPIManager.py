@@ -35,6 +35,7 @@ class TestVerification(unittest.TestCase):
     test_enrollment_id = e.steps(payload_update=p)
 
     v = Verification(temp_token(), app_model_id=test_app_model_id, consumer_id=test_consumer_id)
+    test_verification_id = v.create()
 
     def test_create(self):
         """
@@ -100,11 +101,16 @@ class TestVerification(unittest.TestCase):
         verify_result = self.v.step_two(payload_update=p)
         self.assertIsNotNone(verify_result)
 
+    def test_delete(self):
+        status, response = self.e.delete(self.test_verification_id)
+        self.assertEqual(status, 204)
+
 
 class TestEnrollment(unittest.TestCase):
     test_model_id = '5571c3a5c203f17826740e901903cafb'  # "boston", "chicago", "pyramid"
     test_consumer_id = '3c1bbea5f380bcbfef6910e0c879bf82'  # M theo walcott
     e = Enrollment(temp_token(), app_model_id=test_model_id, consumer_id=test_consumer_id)
+    test_enrollment_id = e.create()
 
     def test_create(self):
         enrollment_id = self.e.create()
@@ -147,6 +153,10 @@ class TestEnrollment(unittest.TestCase):
         }
         enrollment_id = self.e.steps(payload_update=p)
         self.assertRegexpMatches(enrollment_id, h.regx_pattern_id())
+
+    def test_delete(self):
+        status, response = self.e.delete(self.test_consumer_id)
+        self.assertEqual(status, 204)
 
 
 class TestAnalysis(unittest.TestCase):
@@ -219,6 +229,7 @@ class TestConsumer(unittest.TestCase):
         "gender": 'M'
     }
     c = Consumer(token=temp_token(), payload=p)
+    test_consumer_id = c.create()
 
     def test_create(self):
         consumer = self.c.create()
@@ -255,8 +266,9 @@ class TestConsumer(unittest.TestCase):
         result = self.c.get_all()
         self.assertIsNotNone(result.get('items'))
 
-    def delete(self):
-        pass
+    def test_delete(self):
+        status, response = self.c.delete(self.test_consumer_id)
+        self.assertEqual(status, 204)
 
 
 class TestAppModel(unittest.TestCase):
@@ -314,8 +326,9 @@ class TestAppModel(unittest.TestCase):
         result = self.am.get_all()
         self.assertIsNotNone(result.get('href'))
 
-    def delete(self):
-        pass
+    def test_delete(self):
+        status, response = self.am.delete(self.test_app_model_id)
+        self.assertEqual(status, 204)
 
 
 class TestTokenGetter(unittest.TestCase):
